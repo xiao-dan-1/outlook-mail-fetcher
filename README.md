@@ -49,11 +49,7 @@ python -m mail_receiver.web --host 127.0.0.1 --port 8765 --account-file accounts
 
 ## Docker
 
-默认 GHCR 镜像：
-
-```text
-ghcr.io/xiao-dan-1/outlook-mail-fetcher:latest
-```
+默认 GHCR 镜像：`ghcr.io/xiao-dan-1/outlook-mail-fetcher:latest`。
 
 修改端口只改左侧宿主机端口：
 
@@ -62,7 +58,7 @@ ports:
   - "9876:8765"
 ```
 
-此时访问 `http://127.0.0.1:9876/`。
+访问 `http://127.0.0.1:9876/`。
 
 常用命令：
 
@@ -72,11 +68,15 @@ docker compose logs -f outlook-mail-fetcher
 docker compose down
 ```
 
-本地源码构建：
+### Update
 
 ```powershell
+docker compose pull && docker compose up -d
+git pull
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
+
+第一行用于更新 GHCR 预构建镜像；后两行用于更新本地源码构建。
 
 本地构建默认使用 `python:3.11-slim`；如需替换基础镜像，修改 `docker-compose.build.yml` 中的 `PYTHON_IMAGE`。
 

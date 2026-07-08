@@ -9,6 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 GHCR_IMAGE = "ghcr.io/xiao-dan-1/outlook-mail-fetcher:latest"
 
 
+def markdown_h2_section(markdown: str, title: str) -> str:
+    match = re.search(
+        rf"^## {re.escape(title)}\s*$\n(?P<body>.*?)(?=^## |\Z)",
+        markdown,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        raise AssertionError(f"README section not found: {title}")
+    return match.group("body")
+
+
 class DockerDeploymentTests(unittest.TestCase):
     def read_root_file(self, name: str) -> str:
         return (ROOT / name).read_text(encoding="utf-8")
@@ -92,7 +103,7 @@ class DockerDeploymentTests(unittest.TestCase):
         self.assertIn(GHCR_IMAGE, readme)
         self.assertIn("docker compose up -d", readme)
         self.assertIn("http://127.0.0.1:8765/", readme)
-        docker_section = readme.split("## Docker", 1)[1].split("## ", 1)[0]
+        docker_section = markdown_h2_section(readme, "Docker")
         self.assertIn('"9876:8765"', docker_section)
         self.assertIn("mail.sqlite3", docker_section)
         self.assertIn("docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build", docker_section)
@@ -103,6 +114,16 @@ class DockerDeploymentTests(unittest.TestCase):
         self.assertNotIn("--account-file", docker_section)
         self.assertNotIn("ACCOUNT_FILE", docker_section)
         self.assertNotRegex(docker_section, re.compile(r"order_\d+\.txt", re.IGNORECASE))
+
+    def test_readme_documents_docker_update_commands(self) -> None:
+        readme = self.read_root_file("README.md")
+        docker_section = markdown_h2_section(readme, "Docker")
+
+        self.assertIn("### Update", docker_section)
+        self.assertIn("docker compose pull", docker_section)
+        self.assertIn("docker compose pull && docker compose up -d", docker_section)
+        self.assertIn("git pull", docker_section)
+        self.assertIn("docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build", docker_section)
 
     def test_readme_uses_generic_account_file_names_for_public_repo(self) -> None:
         readme = self.read_root_file("README.md")
