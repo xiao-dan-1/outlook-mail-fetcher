@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Outlook 邮件调试台</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <svg aria-hidden="true" class="svg-sprite">
+      <symbol id="icon-outlook" viewBox="0 0 24 24">
+        <path d="M4.5 6.75A2.25 2.25 0 0 1 6.75 4.5h10.5a2.25 2.25 0 0 1 2.25 2.25v10.5a2.25 2.25 0 0 1-2.25 2.25H6.75a2.25 2.25 0 0 1-2.25-2.25z" />
+        <path d="m5.25 8.25 6.75 4.5 6.75-4.5" />
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <path d="m5.25 12.75 4.5 4.5 9-10.5" />
+      </symbol>
+      <symbol id="icon-play" viewBox="0 0 24 24">
+        <path d="M8.25 5.75v12.5l10-6.25z" />
+      </symbol>
+      <symbol id="icon-clear" viewBox="0 0 24 24">
+        <path d="M7.5 7.5 16.5 16.5" />
+        <path d="m16.5 7.5-9 9" />
+      </symbol>
+    </svg>
+
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-lockup">
+          <div class="brand-mark">
+            <svg class="icon" aria-hidden="true"><use href="#icon-outlook"></use></svg>
+          </div>
+          <div>
+            <h1>Outlook 邮件调试台</h1>
+            <p>账号校验、IMAP 拉取与本次结果审阅</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="themeToggle" type="button" class="theme-toggle" aria-label="切换浅色或深色主题" aria-pressed="false">
+            <span>浅色</span>
+            <span>深色</span>
+          </button>
+          <div id="statusModule" class="status-module is-ready" data-status="ready" aria-live="polite">
+            <span class="status-orb"></span>
+            <div>
+              <span>系统状态</span>
+              <strong id="statusLine" data-full-status="准备就绪" data-compact-status="准备就绪" title="准备就绪">准备就绪</strong>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="workspace dashboard-grid">
+        <div class="control-column">
+          <section class="panel account-input-panel">
+            <div class="section-title">
+              <div>
+                <h2>账号管理</h2>
+              </div>
+              <div class="section-actions">
+                <button id="privacyToggle" type="button" class="button ghost privacy-toggle" aria-pressed="true" aria-disabled="true" disabled title="输入后自动遮蔽敏感字段">隐私保护</button>
+                <span id="accountCount" class="count-chip">0 个账号</span>
+              </div>
+            </div>
+
+            <label class="field-label">
+              <span>粘贴账号</span>
+              <textarea
+                id="accountTextInput"
+                spellcheck="false"
+                autocomplete="off"
+                autocapitalize="none"
+                autocorrect="off"
+                aria-describedby="inputQuality"
+                data-private="false"
+                wrap="off"
+                title="每行一个账号：邮箱----密码----客户端 ID----刷新令牌；粘贴后自动遮蔽敏感字段"
+                placeholder="邮箱----密码----客户端 ID----刷新令牌"
+              ></textarea>
+            </label>
+            <div id="inputQuality" class="input-quality" aria-live="polite"></div>
+
+            <div class="account-status-header">
+              <div>
+                <h3>账号状态</h3>
+              </div>
+            </div>
+            <div id="accountList" class="account-list"></div>
+          </section>
+
+          <section class="panel operation-panel">
+            <div class="section-title">
+              <div>
+                <h2>控制台</h2>
+              </div>
+            </div>
+            <div class="operation-grid">
+              <label class="field-label">
+                <span>邮箱目录</span>
+                <input id="mailboxInput" type="text" value="INBOX" />
+              </label>
+              <label class="field-label compact-field">
+                <span>每账号最多</span>
+                <input id="limitInput" type="number" min="0" max="100" value="1" />
+              </label>
+            </div>
+            <div class="scope-toggle-group" role="group" aria-label="拉取范围">
+              <button id="selectedScopeBtn" type="button" class="scope-toggle is-active" aria-pressed="true">
+                选中账号
+              </button>
+              <button id="allScopeBtn" type="button" class="scope-toggle" aria-pressed="false">
+                全部账号
+              </button>
+            </div>
+            <label class="raw-fetch-toggle" title="下载每封完整 RFC822 原文，可能明显变慢。" aria-label="下载每封完整 RFC822 原文，可能明显变慢。">
+              <input id="rawFetchToggle" type="checkbox" />
+              <span>
+                <strong>完整原文</strong>
+                <small>RFC822 · 较慢</small>
+              </span>
+            </label>
+            <div id="operationNote" class="operation-note" aria-live="polite">
+              <span>会话模式</span>
+              <strong>
+                <span class="operation-note-full">即时预览，不写入本地库；刷新页面即清空本次结果。</span>
+                <span class="operation-note-compact" aria-hidden="true">预览 · 不入库 · 刷新清空</span>
+              </strong>
+            </div>
+            <div class="action-stack">
+              <button id="fetchBtn" type="button" class="button primary">
+                <span class="button-spinner" aria-hidden="true"></span>
+                <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+                <span>拉取邮件</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="panel run-log-panel">
+            <div class="section-title">
+              <div>
+                <h2>运行日志</h2>
+              </div>
+              <button id="clearLogBtn" type="button" class="button ghost" disabled aria-disabled="true" title="暂无运行记录">
+                <svg class="icon" aria-hidden="true"><use href="#icon-clear"></use></svg>
+                清空记录
+              </button>
+            </div>
+            <div class="activity-frame">
+              <div class="activity-toolbar">
+                <span class="activity-pulse" aria-hidden="true"></span>
+                <strong>会话事件</strong>
+                <small class="activity-hint">最新优先</small>
+              </div>
+              <div id="runLog" class="run-log activity-log" role="log" aria-live="polite" aria-label="运行记录，最新记录在顶部" tabindex="-1"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="review-column">
+          <section class="panel result-panel">
+            <div class="section-title">
+              <div>
+                <h2>邮件结果</h2>
+              </div>
+            </div>
+            <div id="mailSummary" class="mail-result-summary" data-state="empty" aria-live="polite" aria-label="邮件结果摘要">
+              <div class="mail-summary-copy">
+                <strong>等待拉取</strong>
+                <span>收件箱列表和阅读区会在同一视图内更新。</span>
+              </div>
+              <div class="mail-summary-metrics" aria-label="待处理摘要">
+                <span class="summary-metric is-muted"><span>状态</span><strong>待命</strong></span>
+                <span class="summary-metric is-muted"><span>邮件</span><strong>0</strong></span>
+                <span class="summary-metric is-muted"><span>账号</span><strong>0</strong></span>
+              </div>
+            </div>
+            <section class="mail-workbench">
+              <div class="mail-list-shell">
+                <div class="mail-list empty" id="mailList">
+                  <div class="mail-empty-panel mail-list-empty-state" aria-label="空邮件列表引导">
+                    <div class="mail-empty-copy">
+                      <span class="mail-empty-icon"><svg class="icon" aria-hidden="true"><use href="#icon-outlook"></use></svg></span>
+                      <div>
+                        <strong>等待本次拉取</strong>
+                        <span>拉取成功后会在这里显示最近邮件，并自动选中第一封。</span>
+                      </div>
+                    </div>
+                    <div class="mail-empty-guide" aria-hidden="true">
+                      <span class="mail-empty-step"><i></i>账号解析</span>
+                      <span class="mail-empty-step"><i></i>IMAP 拉取</span>
+                      <span class="mail-empty-step"><i></i>自动选中</span>
+                    </div>
+                    <div class="mail-empty-rows" aria-hidden="true">
+                      <div class="mail-empty-row is-preview-selected">
+                        <span class="mail-row-status-dot"></span>
+                        <div>
+                          <span class="mail-empty-row-subject"></span>
+                          <span class="mail-empty-row-meta"></span>
+                        </div>
+                        <span class="mail-empty-row-time"></span>
+                      </div>
+                      <div class="mail-empty-row is-muted">
+                        <span class="mail-row-status-dot"></span>
+                        <div>
+                          <span class="mail-empty-row-subject"></span>
+                          <span class="mail-empty-row-meta"></span>
+                        </div>
+                        <span class="mail-empty-row-time"></span>
+                      </div>
+                      <div class="mail-empty-row is-muted">
+                        <span class="mail-row-status-dot"></span>
+                        <div>
+                          <span class="mail-empty-row-subject"></span>
+                          <span class="mail-empty-row-meta"></span>
+                        </div>
+                        <span class="mail-empty-row-time"></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="mail-reader-shell">
+                <article class="mail-detail" id="mailDetail">
+                  <div class="mail-detail-placeholder mail-empty-hero" aria-label="阅读区占位预览">
+                    <span class="mail-empty-icon"><svg class="icon" aria-hidden="true"><use href="#icon-outlook"></use></svg></span>
+                    <strong>选择邮件查看详情</strong>
+                    <span>主题、来源、收件人和正文预览会在选中邮件后展开。</span>
+                    <div class="placeholder-reader-frame" aria-hidden="true">
+                      <div class="placeholder-meta-grid">
+                        <span>当前会话预览</span>
+                        <span>关键头信息</span>
+                      </div>
+                      <div class="placeholder-line"></div>
+                      <div class="placeholder-line short"></div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

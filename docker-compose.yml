@@ -1,0 +1,8 @@
+services:
+  outlook-mail-fetcher:
+    image: ghcr.io/xiao-dan-1/outlook-mail-fetcher:latest
+    container_name: outlook-mail-fetcher
+    init: true
+    ports:
+      - "8765:8765"
+    restart: unless-stopped

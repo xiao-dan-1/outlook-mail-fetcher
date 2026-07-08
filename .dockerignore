@@ -1,0 +1,17 @@
+.git
+.gitignore
+.agents/
+.test-mail-store/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+*.log
+.env
+.env.*
+mail.sqlite3
+order_*.txt
+docs/
+tests/

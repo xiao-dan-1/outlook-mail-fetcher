@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.sqlite3
+*.db
+.env
+.env.*
+order_*.txt
+.test-mail-store/
+.agents/
+docs/superpowers/

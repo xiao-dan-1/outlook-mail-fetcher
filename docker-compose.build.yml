@@ -1,0 +1,8 @@
+services:
+  outlook-mail-fetcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_IMAGE: python:3.11-slim
+    image: outlook-mail-fetcher:local
