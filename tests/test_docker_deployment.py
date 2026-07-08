@@ -88,11 +88,11 @@ class DockerDeploymentTests(unittest.TestCase):
     def test_readme_documents_docker_one_command_without_account_file(self) -> None:
         readme = self.read_root_file("README.md")
 
-        self.assertIn("## Docker 一键部署", readme)
+        self.assertIn("## Docker", readme)
         self.assertIn(GHCR_IMAGE, readme)
         self.assertIn("docker compose up -d", readme)
         self.assertIn("http://127.0.0.1:8765/", readme)
-        docker_section = readme.split("## Docker 一键部署", 1)[1].split("## ", 1)[0]
+        docker_section = readme.split("## Docker", 1)[1].split("## ", 1)[0]
         self.assertIn('"9876:8765"', docker_section)
         self.assertIn("mail.sqlite3", docker_section)
         self.assertIn("docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build", docker_section)

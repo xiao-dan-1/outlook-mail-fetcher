@@ -26,6 +26,31 @@ class ProjectMetadataTests(unittest.TestCase):
         self.assertRegex(readme, re.compile(r"^## License\s+MIT License", re.MULTILINE))
         self.assertIn("[MIT License](LICENSE)", readme)
 
+    def test_readme_has_concise_public_project_structure(self) -> None:
+        readme = self.read_root_file("README.md")
+
+        expected_sections = [
+            "# Outlook Mail Fetcher",
+            "## Features",
+            "## Account Format",
+            "## Quick Start",
+            "## Docker",
+            "## CLI",
+            "## Data and Privacy",
+            "## Development",
+            "## License",
+        ]
+        last_index = -1
+        for section in expected_sections:
+            with self.subTest(section=section):
+                index = readme.find(section)
+                self.assertGreater(index, last_index)
+                last_index = index
+
+        self.assertNotIn("本次界面变更摘要", readme)
+        self.assertNotIn("Outlook 邮件调试台", readme.splitlines()[0])
+        self.assertLessEqual(len(readme.splitlines()), 140)
+
 
 if __name__ == "__main__":
     unittest.main()
