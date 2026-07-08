@@ -40,6 +40,20 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("<h1>Outlook 邮件</h1>", html)
         self.assertNotIn("Outlook 邮件调试台", html)
 
+    def test_frontend_branding_shows_runtime_version_badge(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        js = STATIC_JS.read_text(encoding="utf-8")
+        css = STATIC_CSS.read_text(encoding="utf-8")
+
+        self.assertIn('id="appVersionBadge"', html)
+        self.assertIn('class="version-badge"', html)
+        self.assertIn("appVersionBadge: document.getElementById(\"appVersionBadge\")", js)
+        self.assertIn("el.appVersionBadge.textContent = `v${config.version}`", js)
+        self.assertIn("el.appVersionBadge.hidden = false", js)
+        version_badge = css_rule(css[: css.index("@media")], ".version-badge")
+        self.assertIn("border-radius: 999px", version_badge)
+        self.assertIn("font-size: 12px", version_badge)
+
     def test_dashboard_layout_has_modern_productivity_structure(self) -> None:
         html = STATIC_HTML.read_text(encoding="utf-8")
 

@@ -1,4 +1,6 @@
 from pathlib import Path
+from contextlib import redirect_stdout
+import io
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -8,6 +10,15 @@ from mail_receiver.imap_client import EmailRecord
 
 
 class CliFetchTests(unittest.TestCase):
+    def test_cli_exposes_version_flag(self) -> None:
+        output = io.StringIO()
+
+        with self.assertRaises(SystemExit) as raised, redirect_stdout(output):
+            cli.build_parser().parse_args(["--version"])
+
+        self.assertEqual(raised.exception.code, 0)
+        self.assertRegex(output.getvalue(), r"Outlook Mail Fetcher \d+\.\d+\.\d+")
+
     def test_fetch_continues_after_one_account_failure(self) -> None:
         with TemporaryDirectory() as directory:
             base = Path(directory)

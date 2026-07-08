@@ -98,6 +98,7 @@ class WebServiceTests(unittest.TestCase):
 
         self.assertEqual(response.status, 200)
         self.assertIsNone(data["account_file"])
+        self.assertRegex(data["version"], r"^\d+\.\d+\.\d+$")
 
     def test_inspect_accounts_returns_masked_accounts(self) -> None:
         with TemporaryDirectory() as directory:

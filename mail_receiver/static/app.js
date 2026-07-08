@@ -20,6 +20,7 @@ let autoParseTimer = null;
 const el = {
   statusLine: document.getElementById("statusLine"),
   statusModule: document.getElementById("statusModule"),
+  appVersionBadge: document.getElementById("appVersionBadge"),
   themeToggle: document.getElementById("themeToggle"),
   fetchBtn: document.getElementById("fetchBtn"),
   accountTextInput: document.getElementById("accountTextInput"),
@@ -1348,6 +1349,11 @@ function renderDetail(mail) {
 async function loadConfig() {
   const config = await api("/api/config");
   state.config = config;
+  if (config.version && el.appVersionBadge) {
+    el.appVersionBadge.textContent = `v${config.version}`;
+    el.appVersionBadge.title = `当前版本 v${config.version}`;
+    el.appVersionBadge.hidden = false;
+  }
   el.mailboxInput.value = config.defaults.mailbox;
   el.limitInput.value = normalizeLimit(config.defaults.limit);
   renderAccounts([]);

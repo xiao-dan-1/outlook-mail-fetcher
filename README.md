@@ -129,6 +129,7 @@ python -m mail_receiver.cli fetch accounts.txt --account user@outlook.com --limi
 - 日志和界面只展示脱敏后的账号信息。
 
 ## Development
+当前版本：`0.1.0`。发布版本：`git tag v0.1.0 && git push origin v0.1.0`，GitHub Actions 会发布同名 GHCR 镜像。
 
 ```powershell
 python -m unittest discover -s tests

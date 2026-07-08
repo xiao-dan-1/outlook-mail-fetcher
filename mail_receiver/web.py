@@ -11,6 +11,7 @@ from time import perf_counter
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from . import __version__
 from .accounts import Account, AccountFormatError, load_accounts, parse_accounts
 from .imap_client import (
     DEFAULT_IMAP_HOST,
@@ -304,7 +305,7 @@ def email_record_to_dict(record: Any, *, next_id: int, include_raw: bool = False
 
 def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
     class ReceiverHandler(BaseHTTPRequestHandler):
-        server_version = "MailReceiverDebug/1.0"
+        server_version = f"OutlookMailFetcher/{__version__}"
 
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -317,6 +318,7 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
             if parsed.path == "/api/config":
                 self._send_json(
                     {
+                        "version": __version__,
                         "account_file": str(config.account_file) if config.account_file else None,
                         "defaults": {
                             "mailbox": "INBOX",

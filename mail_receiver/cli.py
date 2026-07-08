@@ -4,6 +4,7 @@ import argparse
 import logging
 import sys
 
+from . import __version__
 from .accounts import AccountFormatError, load_accounts
 from .imap_client import (
     DEFAULT_IMAP_HOST,
@@ -18,6 +19,7 @@ from .storage import DEFAULT_DB_PATH, MailStore
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Receive Outlook mail into a local searchable store.")
+    parser.add_argument("--version", action="version", version=f"Outlook Mail Fetcher {__version__}")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="SQLite database path.")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug logging.")
 

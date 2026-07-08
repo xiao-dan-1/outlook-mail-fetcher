@@ -388,6 +388,34 @@ h3 {
   line-height: 1.45;
 }
 
+.brand-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.version-badge {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--line-soft) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+  color: color-mix(in srgb, var(--text) 78%, var(--muted));
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+[data-theme="dark"] .version-badge {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
