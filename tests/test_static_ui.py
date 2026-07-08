@@ -33,6 +33,13 @@ def css_rule(css: str, selector: str) -> str:
 
 
 class StaticUiTests(unittest.TestCase):
+    def test_frontend_branding_uses_short_product_name(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+
+        self.assertIn("<title>Outlook 邮件</title>", html)
+        self.assertIn("<h1>Outlook 邮件</h1>", html)
+        self.assertNotIn("Outlook 邮件调试台", html)
+
     def test_dashboard_layout_has_modern_productivity_structure(self) -> None:
         html = STATIC_HTML.read_text(encoding="utf-8")
 
