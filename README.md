@@ -221,3 +221,7 @@ python -m unittest discover -s tests
 ```
 
 当前测试覆盖账号解析、OAuth/IMAP 流程封装、SQLite 存储、Web API、静态 UI 结构和响应式样式约束。
+
+## License
+
+MIT License. See [MIT License](LICENSE).
