@@ -45,6 +45,12 @@
   --panel-shadow: 0 16px 36px rgba(22, 34, 51, 0.06);
   --shadow-soft: 0 9px 20px rgba(22, 34, 51, 0.045);
   --shadow-floating: 0 20px 52px rgba(17, 24, 39, 0.11);
+  --chrome-border: rgba(203, 213, 225, 0.72);
+  --chrome-highlight: rgba(255, 255, 255, 0.72);
+  --panel-depth-shadow: 0 20px 46px rgba(22, 34, 51, 0.075), 0 1px 0 rgba(255, 255, 255, 0.60) inset;
+  --panel-lift-shadow: 0 18px 40px rgba(22, 34, 51, 0.105), 0 1px 0 rgba(255, 255, 255, 0.62) inset;
+  --control-shadow: 0 1px 0 rgba(255, 255, 255, 0.70) inset, 0 8px 18px rgba(22, 34, 51, 0.035);
+  --accent-gradient: linear-gradient(135deg, #0a72c4 0%, #0877c9 52%, #0891b2 100%);
   --radius-xs: 6px;
   --radius-sm: 9px;
   --radius-md: 13px;
@@ -105,6 +111,12 @@
   --panel-shadow: 0 15px 38px rgba(0, 0, 0, 0.23);
   --shadow-soft: 0 9px 26px rgba(0, 0, 0, 0.18);
   --shadow-floating: 0 24px 64px rgba(0, 0, 0, 0.38);
+  --chrome-border: rgba(148, 163, 184, 0.20);
+  --chrome-highlight: rgba(255, 255, 255, 0.10);
+  --panel-depth-shadow: 0 20px 52px rgba(0, 0, 0, 0.30), 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+  --panel-lift-shadow: 0 24px 64px rgba(0, 0, 0, 0.36), 0 1px 0 rgba(255, 255, 255, 0.07) inset;
+  --control-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 12px 28px rgba(0, 0, 0, 0.18);
+  --accent-gradient: linear-gradient(135deg, #2a94e8 0%, #38bdf8 54%, #22d3ee 100%);
   --focus-ring: 0 0 0 3px rgba(96, 183, 255, 0.15), 0 0 0 1px rgba(96, 183, 255, 0.46);
 }
 
@@ -1336,12 +1348,13 @@ h3 {
 .account-row {
   width: 100%;
   display: grid;
-  gap: 2px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
   padding: 12px;
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
   transition: border-color 180ms var(--ease-standard), background 180ms var(--ease-standard), transform 180ms var(--ease-standard);
 }
 
@@ -1362,11 +1375,59 @@ h3 {
   color: color-mix(in srgb, var(--text) 78%, var(--muted));
 }
 
-.account-row:focus-visible {
-  border-color: rgba(8, 120, 216, 0.58);
-  background: var(--row-hover);
-  box-shadow: var(--focus-ring);
+.account-select-button {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.account-select-button:focus-visible {
   outline: 0;
+  border-radius: calc(var(--radius-sm) - 3px);
+  box-shadow: var(--focus-ring);
+}
+
+.copy-account-button {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 72%, var(--muted));
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  transition: color 180ms var(--ease-standard), transform 180ms var(--ease-standard), opacity 180ms var(--ease-standard);
+}
+
+.copy-account-button .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.copy-account-button:hover {
+  background: transparent;
+  color: var(--text-strong);
+}
+
+.copy-account-button:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.account-row.is-selected .copy-account-button {
+  background: transparent;
+  color: color-mix(in srgb, var(--accent) 66%, var(--text));
 }
 
 .account-row strong,
@@ -3585,6 +3646,514 @@ h3 {
   color: var(--text-strong);
   font-size: 13px;
   font-weight: 720;
+}
+
+/* Modern SaaS refinement layer: visual-only overrides, business logic untouched. */
+.app-shell {
+  padding: clamp(16px, 1.6vw, 24px);
+}
+
+.app-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--line-soft) 28%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in srgb, var(--line-soft) 24%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(circle at 50% 0%, rgba(0, 0, 0, 0.40), transparent 68%);
+  opacity: 0.30;
+}
+
+[data-theme="dark"] .app-shell::after {
+  opacity: 0.20;
+  background-size: 72px 72px;
+}
+
+.app-header {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--chrome-border);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-strong) 86%, transparent), color-mix(in srgb, var(--surface-glass) 72%, transparent)),
+    radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--accent-softer) 76%, transparent), transparent 26rem);
+  box-shadow: var(--panel-depth-shadow);
+}
+
+.app-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 13%, transparent), transparent 24%, transparent 78%, color-mix(in srgb, var(--cyan) 10%, transparent)),
+    linear-gradient(180deg, var(--chrome-highlight), transparent 42%);
+  opacity: 0.62;
+}
+
+.app-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.brand-mark {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.22), transparent 38%),
+    var(--accent-gradient);
+  box-shadow: 0 16px 30px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+}
+
+.brand-lockup h1 {
+  letter-spacing: -0.04em;
+}
+
+.brand-subtitle {
+  color: color-mix(in srgb, var(--muted) 92%, var(--text));
+}
+
+.version-badge {
+  box-shadow: 0 1px 0 var(--chrome-highlight) inset;
+}
+
+.theme-toggle {
+  border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 82%, transparent), color-mix(in srgb, var(--surface-raised) 56%, transparent));
+  box-shadow: var(--control-shadow);
+}
+
+.theme-toggle::before {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 96%, transparent), color-mix(in srgb, var(--surface-soft) 72%, transparent));
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.70);
+}
+
+[data-theme="dark"] .theme-toggle::before {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-strong) 20%, var(--surface-raised)), color-mix(in srgb, var(--surface-soft) 94%, transparent));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+[data-theme="dark"] .theme-toggle span:last-child {
+  color: #f8fafc;
+}
+
+.status-module {
+  border-color: color-mix(in srgb, var(--chrome-border) 88%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 74%, transparent), color-mix(in srgb, var(--surface-soft) 54%, transparent));
+  box-shadow: var(--control-shadow);
+}
+
+.status-orb {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--ok-soft) 54%, transparent),
+    0 0 18px color-mix(in srgb, var(--ok) 32%, transparent);
+}
+
+.dashboard-grid {
+  gap: clamp(16px, 1.4vw, 22px);
+}
+
+.control-column,
+.review-column {
+  gap: clamp(14px, 1.2vw, 18px);
+}
+
+.panel {
+  border-color: color-mix(in srgb, var(--chrome-border) 78%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 76%, transparent), color-mix(in srgb, var(--surface-glass) 76%, transparent)),
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--accent-softer) 44%, transparent), transparent 18rem);
+  box-shadow: var(--panel-depth-shadow);
+}
+
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: auto 16px 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 14%, var(--line-soft)), transparent);
+  opacity: 0.56;
+}
+
+.section-title {
+  min-height: 28px;
+}
+
+.section-title h2,
+.account-status-header h3 {
+  letter-spacing: -0.02em;
+}
+
+.section-title h2 {
+  position: relative;
+}
+
+.section-title h2::after {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 2px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 36%, var(--line-soft));
+}
+
+.account-input-panel textarea {
+  border-color: color-mix(in srgb, var(--chrome-border) 72%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 72%, transparent), color-mix(in srgb, var(--field-bg) 92%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight), 0 10px 22px rgba(15, 23, 42, 0.025);
+}
+
+.account-input-panel textarea:focus {
+  background:
+    radial-gradient(circle at 18px 16px, color-mix(in srgb, var(--accent-softer) 64%, transparent), transparent 8rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 78%, transparent), color-mix(in srgb, var(--field-bg) 96%, transparent));
+}
+
+.input-quality {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--line-soft) 88%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 60%, transparent), color-mix(in srgb, var(--surface-soft) 70%, transparent));
+}
+
+.input-quality::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
+  opacity: 0.72;
+}
+
+.quality-meter {
+  background: color-mix(in srgb, var(--line-soft) 84%, transparent);
+}
+
+.quality-meter span {
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--ok) 78%, var(--cyan)));
+}
+
+.account-empty-panel,
+.account-row {
+  border-color: color-mix(in srgb, var(--line-soft) 88%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--row-bg) 90%, transparent), color-mix(in srgb, var(--surface-soft) 62%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.account-row {
+  position: relative;
+}
+
+.account-row:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--line-strong));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 92%, transparent), color-mix(in srgb, var(--row-hover) 74%, transparent));
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.055), inset 0 1px 0 var(--chrome-highlight);
+}
+
+.account-row.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--line-soft));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-softer) 48%, var(--row-bg)), color-mix(in srgb, var(--row-bg) 96%, transparent));
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--accent) 46%, transparent),
+    inset 0 1px 0 var(--chrome-highlight);
+}
+
+.account-row:hover .copy-account-button,
+.copy-account-button:focus-visible {
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  color: var(--text-strong);
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.operation-panel {
+  border-color: color-mix(in srgb, var(--chrome-border) 74%, transparent);
+  background:
+    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--accent-softer) 66%, transparent), transparent 15rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 86%, transparent), color-mix(in srgb, var(--surface-glass) 78%, transparent));
+  box-shadow: var(--panel-depth-shadow);
+  backdrop-filter: blur(20px) saturate(130%);
+}
+
+.operation-panel .field-label {
+  border-color: color-mix(in srgb, var(--line-soft) 86%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 82%, transparent), color-mix(in srgb, var(--surface-soft) 54%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.operation-panel input:not([type="checkbox"]) {
+  border-color: color-mix(in srgb, var(--line-soft) 76%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+}
+
+.scope-toggle-group {
+  border-color: color-mix(in srgb, var(--line-soft) 90%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 86%, transparent), color-mix(in srgb, var(--surface-raised) 56%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.scope-toggle.is-active {
+  border-color: color-mix(in srgb, var(--accent) 14%, var(--line-soft));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 96%, transparent), color-mix(in srgb, var(--accent-softer) 74%, var(--surface-raised)));
+  color: color-mix(in srgb, var(--text-strong) 88%, var(--accent));
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.055), inset 0 1px 0 var(--chrome-highlight);
+}
+
+.raw-fetch-toggle {
+  min-height: 28px;
+  padding: 4px 7px;
+  border-radius: 10px;
+}
+
+.raw-fetch-toggle:hover {
+  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+  color: var(--text);
+}
+
+.operation-note {
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--line-soft) 78%, transparent);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 58%, transparent), color-mix(in srgb, var(--surface-raised) 42%, transparent));
+}
+
+.operation-note > span::before {
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-softer);
+}
+
+.button.primary {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 46%),
+    linear-gradient(135deg, #172033 0%, #0b1120 56%, #020617 100%);
+}
+
+.activity-frame {
+  border-color: color-mix(in srgb, var(--activity-line) 86%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--activity-bg) 94%, transparent), color-mix(in srgb, var(--surface-soft) 40%, transparent));
+  box-shadow: var(--control-shadow);
+}
+
+.activity-toolbar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--activity-bar) 92%, transparent), color-mix(in srgb, var(--activity-bg) 74%, transparent));
+}
+
+.activity-pulse {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-softer);
+}
+
+.activity-event {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--activity-bar) 58%, transparent), color-mix(in srgb, var(--activity-bg) 92%, transparent));
+}
+
+.result-panel {
+  border-color: color-mix(in srgb, var(--chrome-border) 70%, transparent);
+  background:
+    radial-gradient(circle at 22% 0%, color-mix(in srgb, var(--accent-softer) 52%, transparent), transparent 24rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 78%, transparent), color-mix(in srgb, var(--surface-glass) 78%, transparent));
+  box-shadow: var(--panel-lift-shadow);
+}
+
+.mail-result-summary {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--line-soft) 86%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 72%, transparent), color-mix(in srgb, var(--surface-soft) 58%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.mail-result-summary::before {
+  content: "";
+  position: absolute;
+  inset: 9px auto 9px 0;
+  width: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.mail-summary-copy {
+  padding-left: 2px;
+}
+
+.mail-workbench {
+  border-color: color-mix(in srgb, var(--chrome-border) 78%, transparent);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 94%, transparent), color-mix(in srgb, var(--surface-soft) 42%, transparent));
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.065), inset 0 1px 0 var(--chrome-highlight);
+}
+
+.mail-list-shell {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, transparent), color-mix(in srgb, var(--surface-glass) 76%, transparent));
+}
+
+.mail-reader-shell {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-softer) 46%, transparent), transparent 24rem),
+    linear-gradient(90deg, color-mix(in srgb, var(--surface-soft) 72%, transparent), transparent 18%, transparent 82%, color-mix(in srgb, var(--surface-soft) 70%, transparent)),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 78%, transparent), color-mix(in srgb, var(--surface-raised) 94%, transparent));
+}
+
+.mail-reader-shell::before {
+  background:
+    linear-gradient(90deg, transparent, var(--chrome-highlight), transparent),
+    linear-gradient(90deg, color-mix(in srgb, var(--line-soft) 28%, transparent) 1px, transparent 1px);
+  background-size: 100% 100%, 56px 56px;
+}
+
+.mail-list {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 42%, transparent), transparent 120px);
+}
+
+.mail-empty-hero {
+  position: relative;
+  isolation: isolate;
+}
+
+.mail-empty-hero::before {
+  content: "";
+  position: absolute;
+  width: min(380px, 84%);
+  height: min(240px, 70%);
+  border: 1px solid color-mix(in srgb, var(--line-soft) 70%, transparent);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent-softer) 56%, transparent), transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 48%, transparent), color-mix(in srgb, var(--surface-glass) 36%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+  z-index: -1;
+}
+
+.mail-empty-row,
+.placeholder-reader-frame {
+  border-color: color-mix(in srgb, var(--line-soft) 86%, transparent);
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.mail-row {
+  border-color: color-mix(in srgb, var(--line-soft) 88%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--row-bg) 96%, transparent), color-mix(in srgb, var(--surface-soft) 58%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.mail-row:hover:not(.active) {
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--line-strong));
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06), inset 0 1px 0 var(--chrome-highlight);
+}
+
+.mail-row.active,
+.mail-row[aria-selected="true"] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-softer) 58%, var(--row-bg)), color-mix(in srgb, var(--row-bg) 97%, transparent));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 50%, transparent), inset 0 1px 0 var(--chrome-highlight);
+}
+
+.mail-detail {
+  padding-inline: clamp(22px, 2.7vw, 34px);
+}
+
+.detail-meta-card {
+  border: 1px solid color-mix(in srgb, var(--line-soft) 78%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 70%, transparent), color-mix(in srgb, var(--surface-soft) 52%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.sender-avatar {
+  background:
+    radial-gradient(circle at 40% 24%, color-mix(in srgb, var(--accent-softer) 70%, transparent), transparent 58%),
+    color-mix(in srgb, var(--surface-soft) 72%, transparent);
+}
+
+.body-card {
+  padding: 16px 18px clamp(20px, 2.4vw, 28px);
+  border: 1px solid color-mix(in srgb, var(--line-soft) 72%, transparent);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 62%, transparent), color-mix(in srgb, var(--surface-soft) 32%, transparent));
+  box-shadow: inset 0 1px 0 var(--chrome-highlight);
+}
+
+.body-preview {
+  max-width: 72ch;
+}
+
+[data-theme="dark"] .panel,
+[data-theme="dark"] .app-header,
+[data-theme="dark"] .result-panel,
+[data-theme="dark"] .operation-panel {
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme="dark"] .panel {
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--accent-softer) 60%, transparent), transparent 18rem),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 82%, transparent), color-mix(in srgb, var(--surface-glass) 86%, transparent));
+}
+
+[data-theme="dark"] .account-input-panel textarea,
+[data-theme="dark"] .operation-panel input:not([type="checkbox"]) {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.74), rgba(2, 6, 23, 0.42));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+[data-theme="dark"] .operation-panel,
+[data-theme="dark"] .result-panel {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(42, 148, 232, 0.10), transparent 18rem),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.90), rgba(15, 23, 42, 0.66));
+}
+
+[data-theme="dark"] .account-empty-panel,
+[data-theme="dark"] .account-row,
+[data-theme="dark"] .mail-row,
+[data-theme="dark"] .detail-meta-card,
+[data-theme="dark"] .body-card {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.64), rgba(2, 6, 23, 0.28));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .scope-toggle.is-active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(96, 183, 255, 0.08));
+}
+
+[data-theme="dark"] .mail-reader-shell {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(96, 183, 255, 0.07), transparent 24rem),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.54), transparent 20%, transparent 80%, rgba(15, 23, 42, 0.48)),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.62), rgba(2, 6, 23, 0.22));
 }
 
 @media (min-width: 981px) and (max-height: 820px) {

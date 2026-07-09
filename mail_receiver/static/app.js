@@ -665,6 +665,47 @@ function addLog(message, kind = "") {
   syncLogActions();
 }
 
+function appendLog(message, kind = "") {
+  addLog(message, kind);
+}
+
+function fallbackCopyText(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.inset = "0 auto auto 0";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("copy command returned false");
+    }
+  } finally {
+    textarea.remove();
+  }
+}
+
+async function writeClipboardText(email) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(email);
+    return;
+  }
+  fallbackCopyText(email);
+}
+
+async function copyAccountEmail(email) {
+  try {
+    await writeClipboardText(email);
+    setStatus("已复制邮箱账号", "success");
+    appendLog(`已复制 ${email}`, "ok");
+  } catch (error) {
+    setStatus("复制失败", "error");
+    appendLog(`复制失败：${error.message}`, "fail");
+  }
+}
+
 function mailEmptyIconMarkup() {
   return `<span class="mail-empty-icon"><svg class="icon" aria-hidden="true"><use href="#icon-outlook"></use></svg></span>`;
 }
@@ -1062,23 +1103,36 @@ function renderAccounts(accounts) {
   for (const account of accounts) {
     const status = state.accountStatus.get(account.email);
     const isSelected = account.email === state.activeAccountEmail;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.accountEmail = account.email;
-    button.className = `account-row ${isSelected ? "is-selected" : ""}`.trim();
+    const row = document.createElement("div");
+    row.dataset.accountEmail = account.email;
+    row.className = `account-row ${isSelected ? "is-selected" : ""}`.trim();
     const statusLabel = accountStatusLabel(status);
-    button.title = status ? `${account.email}：${statusLabel}` : account.email;
-    button.setAttribute("aria-label", `${account.email}，${isSelected ? "当前选中，" : ""}${accountStatusLabel(status)}`);
-    button.setAttribute("aria-pressed", String(isSelected));
-    button.innerHTML = `
+    row.title = status ? `${account.email}：${statusLabel}` : account.email;
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.className = "copy-account-button";
+    copyButton.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-copy"></use></svg>';
+    copyButton.title = `复制邮箱账号 ${account.email}`;
+    copyButton.setAttribute("aria-label", `复制邮箱账号 ${account.email}`);
+    copyButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      copyAccountEmail(account.email);
+    });
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "account-select-button";
+    selectButton.setAttribute("aria-label", `${account.email}，${isSelected ? "当前选中，" : ""}${accountStatusLabel(status)}`);
+    selectButton.setAttribute("aria-pressed", String(isSelected));
+    selectButton.innerHTML = `
       <div class="account-row-head">
         <strong>${escapeHtml(account.email)}</strong>
         ${statusPill(account)}
       </div>
       ${accountDiagnosticMarkup(status)}
     `;
-    button.addEventListener("click", () => selectAccount(account.email));
-    el.accountList.append(button);
+    selectButton.addEventListener("click", () => selectAccount(account.email));
+    row.append(copyButton, selectButton);
+    el.accountList.append(row);
   }
 }
 
