@@ -1,0 +1,722 @@
+{
+  "title": "Outlook 邮件",
+  "url": "http://127.0.0.1:8765/",
+  "viewport": {
+    "w": 1440,
+    "h": 1000,
+    "scrollW": 1440,
+    "scrollH": 1580
+  },
+  "active": {
+    "tag": "BUTTON",
+    "id": "themeToggle",
+    "text": "浅色 深色",
+    "rect": {
+      "x": 1073,
+      "y": 48,
+      "w": 122,
+      "h": 40
+    }
+  },
+  "bodyText": "Outlook 邮件\n\n账号校验、IMAP 拉取与本次结果审阅\nv0.1.0\n\n浅色\n深色\n系统状态\n拉取完成：邮件 0，失败 1\n账号管理\n显示原文\n1 个账号\n粘贴账号\n1 / 1 行有效\n格式看起来完整，将自动解析账号。\n账号状态\nuser@example.com\n失败 · OAuth · 1.1s\n慢点 OAuth 1.1s\n控制台\n邮箱目录\n每账号最多\n选中账号\n全部账号\n完整原文\nRFC822 · 较慢\n全部账号\n全部 1 号 · 最多 1 封 · 快速预览\n拉取邮件\n复制当前验证码\n复制全部验证码\n导出结果\n重试失败账号\n隐私模式\n运行日志\n收起日志\n清空记录\n会话事件\n最新优先\n错误\nuser@example.com\n20:36:28\ntoken refresh failed with HTTP 400: {\"error\":\"invalid_grant\",\"error_description\":\"AADSTS7000012: The grant was obtained for a different tenant. Trace ID: 915de426-e5b8-47ba-a14f-5ae008c40e02 Correlation ID: 9749af2e-9c1f-47aa-a6d0-ded4825d9da6 Timestamp: 2026-07-09 12:36:27Z\",\"error_codes\":[7000012],\"timestamp\":\"2026-07-09 12:36:27Z\",\"trace_id\":\"915de426-e5b8-47ba-a14f-5ae008c40e02\",\"correlation_id\":\"9749af2e-9c1f-47aa-a6d0-ded4825d9da6\"}，耗时 1.1s，下载 0B，阶段 OAuth 1.1s\n成功\n账号自动解析完成\n20:36:24\n1 个\n邮件结果\n等待拉取\n收件箱列表和阅读区会在同一视图内更新。\n状态\n待命\n邮件\n0\n账号\n1\n全部\n单账号\n失败账号\n等待本次拉取\n拉取成功后会在这里显示最近邮件，并自动选中第一封。\n账号解析\nIMAP 拉取\n自动选中\n选择邮件查看详情\n主题、来源、收件人和正文预览会在选中邮件后展开。\n当前会话预览\n关键头信息",
+  "headings": [
+    {
+      "i": 0,
+      "tag": "H1",
+      "text": "Outlook 邮件",
+      "rect": {
+        "x": 95,
+        "y": 40,
+        "w": 257,
+        "h": 31
+      }
+    },
+    {
+      "i": 1,
+      "tag": "H2",
+      "text": "账号管理",
+      "rect": {
+        "x": 38,
+        "y": 144,
+        "w": 59,
+        "h": 28
+      }
+    },
+    {
+      "i": 2,
+      "tag": "H3",
+      "text": "账号状态",
+      "rect": {
+        "x": 38,
+        "y": 336,
+        "w": 51,
+        "h": 17
+      }
+    },
+    {
+      "i": 3,
+      "tag": "H2",
+      "text": "控制台",
+      "rect": {
+        "x": 681,
+        "y": 143,
+        "w": 44,
+        "h": 28
+      }
+    },
+    {
+      "i": 4,
+      "tag": "H2",
+      "text": "运行日志",
+      "rect": {
+        "x": 32,
+        "y": 739,
+        "w": 1211,
+        "h": 28
+      }
+    },
+    {
+      "i": 5,
+      "tag": "H2",
+      "text": "邮件结果",
+      "rect": {
+        "x": 40,
+        "y": 716,
+        "w": 59,
+        "h": 28
+      }
+    }
+  ],
+  "actions": [
+    {
+      "i": 0,
+      "tag": "BUTTON",
+      "id": "themeToggle",
+      "cls": "theme-toggle",
+      "text": "浅色 深色",
+      "role": null,
+      "aria": "切换浅色或深色主题",
+      "label": "",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "true",
+      "ariaSelected": null,
+      "rect": {
+        "x": 1073,
+        "y": 48,
+        "w": 122,
+        "h": 40
+      },
+      "color": "rgb(163, 175, 193)",
+      "background": "color(srgb 0.081459 0.115951 0.181012 / 0.84502)",
+      "border": "rgba(148, 163, 184, 0.34)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 1,
+      "tag": "BUTTON",
+      "id": "privacyToggle",
+      "cls": "button ghost privacy-toggle",
+      "text": "显示原文",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": "临时显示粘贴的账号原文",
+      "disabled": false,
+      "ariaPressed": "true",
+      "ariaSelected": null,
+      "rect": {
+        "x": 493,
+        "y": 146,
+        "w": 64,
+        "h": 24
+      },
+      "color": "rgb(248, 250, 252)",
+      "background": "color(srgb 0.0627451 0.0941176 0.152941 / 0.653333)",
+      "border": "rgb(248, 250, 252)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 2,
+      "tag": "BUTTON",
+      "id": "",
+      "cls": "copy-account-button",
+      "text": "",
+      "role": null,
+      "aria": "复制邮箱账号 user@example.com",
+      "label": "",
+      "title": "复制邮箱账号 user@example.com",
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 48,
+        "y": 366,
+        "w": 34,
+        "h": 34
+      },
+      "color": "color(srgb 0.424706 0.708392 0.940471)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.424706 0.708392 0.940471)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 3,
+      "tag": "BUTTON",
+      "id": "",
+      "cls": "account-select-button",
+      "text": "user@example.com 失败 · OAuth · 1.1s 慢点 OAuth 1.1s",
+      "role": null,
+      "aria": "user@example.com，当前选中，失败，OAuth，耗时 1.1s，慢点 OAuth 1.1s，token refresh failed with HTTP 400: {\"error\":\"invalid_grant\",\"error_description\":\"AADSTS7000012: The grant was obtained for a different tenant. Trace ID: 915de426-e5b8-47ba-a14f-5ae008c40e02 Correlation ID: 9749af2e-9c1f-47aa-a6d0-ded4825d9da6 Timestamp: 2026-07-09 12:36:27Z\",\"error_codes\":[7000012],\"timestamp\":\"2026-07-09 12:36:27Z\",\"trace_id\":\"915de426-e5b8-47ba-a14f-5ae008c40e02\",\"correlation_id\":\"9749af2e-9c1f-47aa-a6d0-ded4825d9da6\"}",
+      "label": "",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "true",
+      "ariaSelected": null,
+      "rect": {
+        "x": 89,
+        "y": 364,
+        "w": 534,
+        "h": 39
+      },
+      "color": "rgb(237, 244, 255)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(237, 244, 255)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 4,
+      "tag": "BUTTON",
+      "id": "selectedScopeBtn",
+      "cls": "scope-toggle",
+      "text": "选中账号",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 684,
+        "y": 235,
+        "w": 348,
+        "h": 30
+      },
+      "color": "rgb(156, 168, 186)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(0, 0, 0, 0)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 5,
+      "tag": "BUTTON",
+      "id": "allScopeBtn",
+      "cls": "scope-toggle is-active",
+      "text": "全部账号",
+      "role": null,
+      "aria": null,
+      "label": "选中账号",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "true",
+      "ariaSelected": null,
+      "rect": {
+        "x": 1034,
+        "y": 235,
+        "w": 348,
+        "h": 30
+      },
+      "color": "rgb(248, 250, 252)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(255, 255, 255, 0.08)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 6,
+      "tag": "BUTTON",
+      "id": "fetchBtn",
+      "cls": "button primary",
+      "text": "拉取邮件",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": "",
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 681,
+        "y": 362,
+        "w": 704,
+        "h": 38
+      },
+      "color": "rgb(255, 255, 255)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.0895048 0.11835 0.17822 / 0.920941)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 7,
+      "tag": "BUTTON",
+      "id": "copyCurrentCodeBtn",
+      "cls": "button secondary",
+      "text": "复制当前验证码",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": "当前邮件未识别验证码",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 681,
+        "y": 412,
+        "w": 135,
+        "h": 38
+      },
+      "color": "rgb(120, 194, 255)",
+      "background": "color(srgb 0.0828761 0.190127 0.302375 / 0.263373)",
+      "border": "rgba(148, 163, 184, 0.17)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 8,
+      "tag": "BUTTON",
+      "id": "copyAllCodesBtn",
+      "cls": "button ghost",
+      "text": "复制全部验证码",
+      "role": null,
+      "aria": null,
+      "label": "复制当前验证码",
+      "title": "本次结果暂无验证码",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 823,
+        "y": 412,
+        "w": 135,
+        "h": 38
+      },
+      "color": "rgb(111, 127, 148)",
+      "background": "rgba(22, 31, 48, 0.82)",
+      "border": "rgba(148, 163, 184, 0.17)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 9,
+      "tag": "BUTTON",
+      "id": "exportResultsBtn",
+      "cls": "button ghost",
+      "text": "导出结果",
+      "role": null,
+      "aria": null,
+      "label": "复制全部验证码",
+      "title": "本次暂无可导出结果",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 965,
+        "y": 412,
+        "w": 135,
+        "h": 38
+      },
+      "color": "rgb(111, 127, 148)",
+      "background": "rgba(22, 31, 48, 0.82)",
+      "border": "rgba(148, 163, 184, 0.17)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 10,
+      "tag": "BUTTON",
+      "id": "retryFailedBtn",
+      "cls": "button ghost",
+      "text": "重试失败账号",
+      "role": null,
+      "aria": null,
+      "label": "导出结果",
+      "title": "重试 1 个失败账号",
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 1107,
+        "y": 412,
+        "w": 135,
+        "h": 38
+      },
+      "color": "color(srgb 0.88298 0.913569 0.961098)",
+      "background": "color(srgb 0.0627451 0.0941176 0.152941 / 0.518824)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.0948235)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 11,
+      "tag": "BUTTON",
+      "id": "codePrivacyToggle",
+      "cls": "button ghost",
+      "text": "隐私模式",
+      "role": null,
+      "aria": null,
+      "label": "重试失败账号",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 1249,
+        "y": 412,
+        "w": 135,
+        "h": 38
+      },
+      "color": "color(srgb 0.88298 0.913569 0.961098)",
+      "background": "color(srgb 0.0627451 0.0941176 0.152941 / 0.518824)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.0948235)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 12,
+      "tag": "BUTTON",
+      "id": "logDrawerToggle",
+      "cls": "button ghost",
+      "text": "收起日志",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 1251,
+        "y": 739,
+        "w": 66,
+        "h": 28
+      },
+      "color": "color(srgb 0.639216 0.686275 0.756863 / 0.84)",
+      "background": "color(srgb 0.0627451 0.0941176 0.152941 / 0.403529)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.0875294)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 13,
+      "tag": "BUTTON",
+      "id": "clearLogBtn",
+      "cls": "button ghost",
+      "text": "清空记录",
+      "role": null,
+      "aria": null,
+      "label": "收起日志",
+      "title": "清空当前运行记录",
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 1322,
+        "y": 739,
+        "w": 86,
+        "h": 28
+      },
+      "color": "color(srgb 0.639216 0.686275 0.756863 / 0.84)",
+      "background": "color(srgb 0.0627451 0.0941176 0.152941 / 0.403529)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.0875294)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 14,
+      "tag": "BUTTON",
+      "id": "",
+      "cls": "filter-chip is-active",
+      "text": "全部",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "true",
+      "ariaSelected": null,
+      "rect": {
+        "x": 44,
+        "y": 998,
+        "w": 48,
+        "h": 28
+      },
+      "color": "rgb(248, 250, 252)",
+      "background": "rgba(16, 24, 39, 0.96)",
+      "border": "rgb(248, 250, 252)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 15,
+      "tag": "BUTTON",
+      "id": "",
+      "cls": "filter-chip",
+      "text": "单账号",
+      "role": null,
+      "aria": null,
+      "label": "全部",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 98,
+        "y": 998,
+        "w": 60,
+        "h": 28
+      },
+      "color": "rgb(163, 175, 193)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(163, 175, 193)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 16,
+      "tag": "BUTTON",
+      "id": "",
+      "cls": "filter-chip",
+      "text": "失败账号",
+      "role": null,
+      "aria": null,
+      "label": "单账号",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 164,
+        "y": 998,
+        "w": 72,
+        "h": 28
+      },
+      "color": "rgb(163, 175, 193)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(163, 175, 193)",
+      "outline": "none 3px"
+    }
+  ],
+  "fields": [
+    {
+      "i": 0,
+      "tag": "TEXTAREA",
+      "id": "accountTextInput",
+      "cls": "",
+      "text": "",
+      "role": null,
+      "aria": null,
+      "label": "粘贴账号",
+      "title": "每行一个账号：邮箱----密码----客户端 ID----刷新令牌；粘贴后自动遮蔽敏感字段",
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 38,
+        "y": 202,
+        "w": 595,
+        "h": 78
+      },
+      "color": "rgb(237, 244, 255)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.144)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 1,
+      "tag": "INPUT",
+      "id": "mailboxInput",
+      "cls": "",
+      "text": "",
+      "role": null,
+      "aria": null,
+      "label": "邮箱目录",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 739,
+        "y": 186,
+        "w": 451,
+        "h": 32
+      },
+      "color": "rgb(248, 250, 252)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(148, 163, 184, 0.18)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 2,
+      "tag": "INPUT",
+      "id": "limitInput",
+      "cls": "",
+      "text": "",
+      "role": null,
+      "aria": null,
+      "label": "每账号最多",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 1338,
+        "y": 186,
+        "w": 44,
+        "h": 32
+      },
+      "color": "rgb(248, 250, 252)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(148, 163, 184, 0.18)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 3,
+      "tag": "INPUT",
+      "id": "rawFetchToggle",
+      "cls": "",
+      "text": "",
+      "role": null,
+      "aria": null,
+      "label": "完整原文 RFC822 · 较慢",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 688,
+        "y": 286,
+        "w": 12,
+        "h": 12
+      },
+      "color": "rgb(237, 244, 255)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(148, 163, 184, 0.3)",
+      "outline": "none 3px"
+    }
+  ],
+  "liveRegions": [
+    {
+      "i": 0,
+      "tag": "DIV",
+      "id": "statusModule",
+      "cls": "status-module is-warning",
+      "text": "系统状态 拉取完成：邮件 0，失败 1",
+      "role": null,
+      "aria": "系统状态：拉取完成：邮件 0，失败 1",
+      "label": "浅色 深色",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 1205,
+        "y": 39,
+        "w": 195,
+        "h": 58
+      },
+      "color": "rgb(237, 244, 255)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.872039 0.718498 0.302503 / 0.332392)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 1,
+      "tag": "DIV",
+      "id": "inputQuality",
+      "cls": "input-quality",
+      "text": "1 / 1 行有效 格式看起来完整，将自动解析账号。",
+      "role": null,
+      "aria": null,
+      "label": "粘贴账号",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 38,
+        "y": 286,
+        "w": 595,
+        "h": 44
+      },
+      "color": "rgb(237, 244, 255)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.10698)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 2,
+      "tag": "DIV",
+      "id": "operationNote",
+      "cls": "operation-note",
+      "text": "全部账号 全部 1 号 · 最多 1 封 · 快速预览",
+      "role": null,
+      "aria": "全部账号：将拉取全部 1 个账号；每账号最多 1 封，预计最多 1 封。快速预览模式，每封最多取 16KB。",
+      "label": "完整原文 RFC822 · 较慢",
+      "title": "将拉取全部 1 个账号；每账号最多 1 封，预计最多 1 封。快速预览模式，每封最多取 16KB。",
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 681,
+        "y": 318,
+        "w": 704,
+        "h": 34
+      },
+      "color": "rgb(139, 152, 171)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(148, 163, 184, 0.16) color(srgb 0.580392 0.639216 0.721569 / 0.0948235) color(srgb 0.580392 0.639216 0.721569 / 0.0948235)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 3,
+      "tag": "DIV",
+      "id": "runLog",
+      "cls": "run-log activity-log",
+      "text": "错误 user@example.com 20:36:28 token refresh failed with HTTP 400: {\"error\":\"invalid_grant\",\"error_description\":\"AADSTS7000012: The grant was obtained for a different tenant. Trace ID: 915de426-e5b8-47ba-a14f-5ae008c40e02 Correlation ID: 9749",
+      "role": "log",
+      "aria": "运行记录，最新记录在顶部",
+      "label": "会话事件 最新优先",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 32,
+        "y": 806,
+        "w": 1376,
+        "h": 166
+      },
+      "color": "rgb(219, 234, 254)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(219, 234, 254)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 4,
+      "tag": "DIV",
+      "id": "mailSummary",
+      "cls": "mail-result-summary",
+      "text": "等待拉取 收件箱列表和阅读区会在同一视图内更新。 状态 待命 邮件 0 账号 1",
+      "role": null,
+      "aria": "待处理摘要",
+      "label": "邮件结果",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 40,
+        "y": 756,
+        "w": 1360,
+        "h": 55
+      },
+      "color": "rgb(237, 244, 255)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.104549)",
+      "outline": "none 3px"
+    }
+  ],
+  "htmlClass": "",
+  "bodyClass": ""
+}

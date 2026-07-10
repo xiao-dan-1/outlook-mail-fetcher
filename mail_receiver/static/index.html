@@ -59,7 +59,7 @@
       </header>
 
       <main class="workspace dashboard-grid">
-        <div class="control-column">
+        <div class="control-column command-center">
           <section class="panel account-input-panel">
             <div class="section-title">
               <div>
@@ -141,30 +141,14 @@
                 <span>拉取邮件</span>
               </button>
             </div>
+            <div class="session-action-bar" aria-label="本次结果快捷操作">
+              <button id="copyCurrentCodeBtn" type="button" class="button secondary" disabled aria-disabled="true">复制当前验证码</button>
+            </div>
           </section>
 
-          <section class="panel run-log-panel">
-            <div class="section-title">
-              <div>
-                <h2>运行日志</h2>
-              </div>
-              <button id="clearLogBtn" type="button" class="button ghost" disabled aria-disabled="true" title="暂无运行记录">
-                <svg class="icon" aria-hidden="true"><use href="#icon-clear"></use></svg>
-                清空记录
-              </button>
-            </div>
-            <div class="activity-frame">
-              <div class="activity-toolbar">
-                <span class="activity-pulse" aria-hidden="true"></span>
-                <strong>会话事件</strong>
-                <small class="activity-hint">最新优先</small>
-              </div>
-              <div id="runLog" class="run-log activity-log" role="log" aria-live="polite" aria-label="运行记录，最新记录在顶部" tabindex="-1"></div>
-            </div>
-          </section>
         </div>
 
-        <div class="review-column">
+        <div class="review-column mail-review-stage">
           <section class="panel result-panel">
             <div class="section-title">
               <div>
@@ -248,6 +232,30 @@
           </section>
         </div>
       </main>
+
+      <button id="logDrawerToggle" type="button" class="button ghost log-drawer-tab" aria-expanded="false" aria-controls="runLogPanel">展开日志</button>
+
+      <section id="runLogPanel" class="panel run-log-panel log-drawer is-collapsed">
+        <div class="section-title">
+          <div>
+            <h2>运行日志</h2>
+          </div>
+          <div class="log-drawer-actions">
+            <button id="clearLogBtn" type="button" class="button ghost" disabled aria-disabled="true" title="暂无运行记录">
+              <svg class="icon" aria-hidden="true"><use href="#icon-clear"></use></svg>
+              清空记录
+            </button>
+          </div>
+        </div>
+        <div class="activity-frame">
+          <div class="activity-toolbar">
+            <span class="activity-pulse" aria-hidden="true"></span>
+            <strong>会话事件</strong>
+            <small class="activity-hint">最新优先</small>
+          </div>
+          <div id="runLog" class="run-log activity-log" role="log" aria-live="polite" aria-label="运行记录，最新记录在顶部" tabindex="-1"></div>
+        </div>
+      </section>
     </div>
 
     <script src="/static/app.js"></script>

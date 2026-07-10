@@ -1,0 +1,674 @@
+{
+  "title": "Outlook 邮件",
+  "url": "http://127.0.0.1:8765/",
+  "viewport": {
+    "w": 390,
+    "h": 844,
+    "scrollW": 390,
+    "scrollH": 1796
+  },
+  "active": {
+    "tag": "BODY",
+    "id": "",
+    "text": "Outlook 邮件 账号校验、IMAP 拉取与本次结果审阅 v0.1.0 浅色 深色 系统状态 准备就绪 账号管理 隐私保护 0 个账号 粘贴账号 等待输入 粘贴后会即时检查行数与基础格式，不展示敏感字段。 账号状态 等待账号输入 粘贴账号后会自动解析，并显示拉取状态。 只显示邮箱 隐藏密钥 控制台 邮箱目录 每账号最多 选中账号 全部账号 完整原文 RFC822 · 较慢 会话模式 先解析账号 · 默认单号 · 快速预览 拉取邮件 复制当前验证码 复制全部验证码 导出结果",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 1796
+    }
+  },
+  "bodyText": "Outlook 邮件\n\n账号校验、IMAP 拉取与本次结果审阅\nv0.1.0\n\n浅色\n深色\n系统状态\n准备就绪\n账号管理\n隐私保护\n0 个账号\n粘贴账号\n等待输入\n粘贴后会即时检查行数与基础格式，不展示敏感字段。\n账号状态\n等待账号输入\n粘贴账号后会自动解析，并显示拉取状态。\n只显示邮箱\n隐藏密钥\n控制台\n邮箱目录\n每账号最多\n选中账号\n全部账号\n完整原文\nRFC822 · 较慢\n会话模式\n先解析账号 · 默认单号 · 快速预览\n拉取邮件\n复制当前验证码\n复制全部验证码\n导出结果\n重试失败账号\n隐私模式\n运行日志\n展开日志\n清空记录\n会话事件\n最新优先\n邮件结果\n等待拉取\n收件箱列表和阅读区会在同一视图内更新。\n状态\n待命\n邮件\n0\n账号\n0\n全部\n单账号\n失败账号\n等待本次拉取\n拉取成功后会在这里显示最近邮件，并自动选中第一封。\n账号解析\nIMAP 拉取\n自动选中\n选择邮件查看详情\n主题、来源、收件人和正文预览会在选中邮件后展开。\n当前会话预览\n关键头信息",
+  "headings": [
+    {
+      "i": 0,
+      "tag": "H1",
+      "text": "Outlook 邮件",
+      "rect": {
+        "x": 67,
+        "y": 23,
+        "w": 245,
+        "h": 22
+      }
+    },
+    {
+      "i": 1,
+      "tag": "H2",
+      "text": "账号管理",
+      "rect": {
+        "x": 23,
+        "y": 167,
+        "w": 196,
+        "h": 27
+      }
+    },
+    {
+      "i": 2,
+      "tag": "H3",
+      "text": "账号状态",
+      "rect": {
+        "x": 23,
+        "y": 352,
+        "w": 344,
+        "h": 17
+      }
+    },
+    {
+      "i": 3,
+      "tag": "H2",
+      "text": "控制台",
+      "rect": {
+        "x": 23,
+        "y": 508,
+        "w": 344,
+        "h": 28
+      }
+    },
+    {
+      "i": 4,
+      "tag": "H2",
+      "text": "运行日志",
+      "rect": {
+        "x": 22,
+        "y": 793,
+        "w": 188,
+        "h": 28
+      }
+    },
+    {
+      "i": 5,
+      "tag": "H2",
+      "text": "邮件结果",
+      "rect": {
+        "x": 23,
+        "y": 1035,
+        "w": 344,
+        "h": 28
+      }
+    }
+  ],
+  "actions": [
+    {
+      "i": 0,
+      "tag": "BUTTON",
+      "id": "themeToggle",
+      "cls": "theme-toggle",
+      "text": "浅色 深色",
+      "role": null,
+      "aria": "切换浅色或深色主题",
+      "label": "",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 23,
+        "y": 81,
+        "w": 128,
+        "h": 50
+      },
+      "color": "rgb(102, 117, 138)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.375529)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 1,
+      "tag": "BUTTON",
+      "id": "privacyToggle",
+      "cls": "button ghost privacy-toggle",
+      "text": "隐私保护",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": "输入后自动遮蔽敏感字段",
+      "disabled": true,
+      "ariaPressed": "true",
+      "ariaSelected": null,
+      "rect": {
+        "x": 230,
+        "y": 169,
+        "w": 63,
+        "h": 23
+      },
+      "color": "rgb(15, 23, 42)",
+      "background": "color(srgb 1 1 1 / 0.68)",
+      "border": "rgb(15, 23, 42)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 2,
+      "tag": "BUTTON",
+      "id": "selectedScopeBtn",
+      "cls": "scope-toggle is-active",
+      "text": "选中账号",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": null,
+      "disabled": true,
+      "ariaPressed": "true",
+      "ariaSelected": null,
+      "rect": {
+        "x": 26,
+        "y": 600,
+        "w": 168,
+        "h": 30
+      },
+      "color": "color(srgb 0.0564706 0.13302 0.237176)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.718442 0.818118 0.906988 / 0.706588)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 3,
+      "tag": "BUTTON",
+      "id": "allScopeBtn",
+      "cls": "scope-toggle",
+      "text": "全部账号",
+      "role": null,
+      "aria": null,
+      "label": "选中账号",
+      "title": null,
+      "disabled": true,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 196,
+        "y": 600,
+        "w": 168,
+        "h": 30
+      },
+      "color": "rgb(111, 119, 133)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(0, 0, 0, 0)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 4,
+      "tag": "BUTTON",
+      "id": "fetchBtn",
+      "cls": "button primary",
+      "text": "拉取邮件",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": "请先粘贴账号信息",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 23,
+        "y": 727,
+        "w": 344,
+        "h": 38
+      },
+      "color": "color(srgb 0.4 0.458824 0.541176 / 0.82)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(203, 213, 225, 0.62)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 5,
+      "tag": "BUTTON",
+      "id": "copyCurrentCodeBtn",
+      "cls": "button secondary",
+      "text": "复制当前验证码",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": "当前邮件未识别验证码",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 23,
+        "y": 777,
+        "w": 63,
+        "h": 38
+      },
+      "color": "rgb(7, 95, 168)",
+      "background": "color(srgb 0.871509 0.929772 0.979712 / 0.253647)",
+      "border": "rgba(203, 213, 225, 0.62)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 6,
+      "tag": "BUTTON",
+      "id": "copyAllCodesBtn",
+      "cls": "button ghost",
+      "text": "复制全部验证码",
+      "role": null,
+      "aria": null,
+      "label": "复制当前验证码",
+      "title": "本次结果暂无验证码",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 93,
+        "y": 777,
+        "w": 63,
+        "h": 38
+      },
+      "color": "rgb(154, 167, 184)",
+      "background": "rgba(248, 251, 255, 0.92)",
+      "border": "rgba(203, 213, 225, 0.62)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 7,
+      "tag": "BUTTON",
+      "id": "exportResultsBtn",
+      "cls": "button ghost",
+      "text": "导出结果",
+      "role": null,
+      "aria": null,
+      "label": "复制全部验证码",
+      "title": "本次暂无可导出结果",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 163,
+        "y": 777,
+        "w": 63,
+        "h": 38
+      },
+      "color": "rgb(154, 167, 184)",
+      "background": "rgba(248, 251, 255, 0.92)",
+      "border": "rgba(203, 213, 225, 0.62)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 8,
+      "tag": "BUTTON",
+      "id": "retryFailedBtn",
+      "cls": "button ghost",
+      "text": "重试失败账号",
+      "role": null,
+      "aria": null,
+      "label": "导出结果",
+      "title": "暂无失败账号",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 234,
+        "y": 777,
+        "w": 63,
+        "h": 38
+      },
+      "color": "rgb(154, 167, 184)",
+      "background": "rgba(248, 251, 255, 0.92)",
+      "border": "rgba(203, 213, 225, 0.62)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 9,
+      "tag": "BUTTON",
+      "id": "codePrivacyToggle",
+      "cls": "button ghost",
+      "text": "隐私模式",
+      "role": null,
+      "aria": null,
+      "label": "重试失败账号",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 304,
+        "y": 777,
+        "w": 63,
+        "h": 38
+      },
+      "color": "color(srgb 0.139765 0.178824 0.254588)",
+      "background": "color(srgb 1 1 1 / 0.54)",
+      "border": "color(srgb 0.886275 0.909804 0.941176 / 0.513882)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 10,
+      "tag": "BUTTON",
+      "id": "logDrawerToggle",
+      "cls": "button ghost",
+      "text": "展开日志",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 217,
+        "y": 794,
+        "w": 63,
+        "h": 27
+      },
+      "color": "color(srgb 0.4 0.458824 0.541176 / 0.84)",
+      "background": "color(srgb 1 1 1 / 0.42)",
+      "border": "color(srgb 0.886275 0.909804 0.941176 / 0.474353)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 11,
+      "tag": "BUTTON",
+      "id": "clearLogBtn",
+      "cls": "button ghost",
+      "text": "清空记录",
+      "role": null,
+      "aria": null,
+      "label": "展开日志",
+      "title": "暂无运行记录",
+      "disabled": true,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 285,
+        "y": 794,
+        "w": 83,
+        "h": 27
+      },
+      "color": "color(srgb 0.4 0.458824 0.541176 / 0.48)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgba(0, 0, 0, 0)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 12,
+      "tag": "BUTTON",
+      "id": "",
+      "cls": "filter-chip is-active",
+      "text": "全部",
+      "role": null,
+      "aria": null,
+      "label": "",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "true",
+      "ariaSelected": null,
+      "rect": {
+        "x": 27,
+        "y": 1168,
+        "w": 48,
+        "h": 28
+      },
+      "color": "rgb(15, 23, 42)",
+      "background": "rgb(255, 255, 255)",
+      "border": "rgb(15, 23, 42)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 13,
+      "tag": "BUTTON",
+      "id": "",
+      "cls": "filter-chip",
+      "text": "单账号",
+      "role": null,
+      "aria": null,
+      "label": "全部",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 81,
+        "y": 1168,
+        "w": 60,
+        "h": 28
+      },
+      "color": "rgb(102, 117, 138)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(102, 117, 138)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 14,
+      "tag": "BUTTON",
+      "id": "",
+      "cls": "filter-chip",
+      "text": "失败账号",
+      "role": null,
+      "aria": null,
+      "label": "单账号",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": "false",
+      "ariaSelected": null,
+      "rect": {
+        "x": 147,
+        "y": 1168,
+        "w": 72,
+        "h": 28
+      },
+      "color": "rgb(102, 117, 138)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(102, 117, 138)",
+      "outline": "none 3px"
+    }
+  ],
+  "fields": [
+    {
+      "i": 0,
+      "tag": "TEXTAREA",
+      "id": "accountTextInput",
+      "cls": "",
+      "text": "",
+      "role": null,
+      "aria": null,
+      "label": "粘贴账号",
+      "title": "每行一个账号：邮箱----密码----客户端 ID----刷新令牌；粘贴后自动遮蔽敏感字段",
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 23,
+        "y": 223,
+        "w": 344,
+        "h": 72
+      },
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.796078 0.835294 0.882353 / 0.519529)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 1,
+      "tag": "INPUT",
+      "id": "mailboxInput",
+      "cls": "",
+      "text": "",
+      "role": null,
+      "aria": null,
+      "label": "邮箱目录",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 81,
+        "y": 551,
+        "w": 170,
+        "h": 32
+      },
+      "color": "rgb(17, 24, 39)",
+      "background": "color(srgb 1 1 1 / 0.92)",
+      "border": "color(srgb 0.886275 0.909804 0.941176 / 0.500706)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 2,
+      "tag": "INPUT",
+      "id": "limitInput",
+      "cls": "",
+      "text": "",
+      "role": null,
+      "aria": null,
+      "label": "每账号最多",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 330,
+        "y": 551,
+        "w": 34,
+        "h": 32
+      },
+      "color": "rgb(17, 24, 39)",
+      "background": "color(srgb 1 1 1 / 0.92)",
+      "border": "color(srgb 0.886275 0.909804 0.941176 / 0.500706)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 3,
+      "tag": "INPUT",
+      "id": "rawFetchToggle",
+      "cls": "",
+      "text": "",
+      "role": null,
+      "aria": null,
+      "label": "完整原文 RFC822 · 较慢",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 30,
+        "y": 651,
+        "w": 12,
+        "h": 12
+      },
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.580392 0.639216 0.721569 / 0.30251)",
+      "outline": "none 3px"
+    }
+  ],
+  "liveRegions": [
+    {
+      "i": 0,
+      "tag": "DIV",
+      "id": "statusModule",
+      "cls": "status-module is-ready",
+      "text": "系统状态 准备就绪",
+      "role": null,
+      "aria": "系统状态：准备就绪",
+      "label": "浅色 深色",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 158,
+        "y": 81,
+        "w": 209,
+        "h": 50
+      },
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.796078 0.835294 0.882353 / 0.63498)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 1,
+      "tag": "DIV",
+      "id": "inputQuality",
+      "cls": "input-quality",
+      "text": "等待输入 粘贴后会即时检查行数与基础格式，不展示敏感字段。",
+      "role": null,
+      "aria": null,
+      "label": "粘贴账号",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 23,
+        "y": 303,
+        "w": 344,
+        "h": 41
+      },
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.886275 0.909804 0.941176 / 0.579765)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 2,
+      "tag": "DIV",
+      "id": "operationNote",
+      "cls": "operation-note",
+      "text": "会话模式 先解析账号 · 默认单号 · 快速预览",
+      "role": null,
+      "aria": "会话模式：先粘贴账号；解析完成后默认只拉取选中账号，避免一次拉取全部账号。快速预览模式，每封最多取 16KB。",
+      "label": "完整原文 RFC822 · 较慢",
+      "title": "先粘贴账号；解析完成后默认只拉取选中账号，避免一次拉取全部账号。快速预览模式，每封最多取 16KB。",
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 23,
+        "y": 683,
+        "w": 344,
+        "h": 34
+      },
+      "color": "color(srgb 0.4 0.458824 0.541177 / 0.78)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.886275 0.909804 0.941176 / 0.513882)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 3,
+      "tag": "DIV",
+      "id": "runLog",
+      "cls": "run-log activity-log",
+      "text": "",
+      "role": "log",
+      "aria": "运行记录，最新记录在顶部",
+      "label": "会话事件 最新优先",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 22,
+        "y": 858,
+        "w": 346,
+        "h": 80
+      },
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.85098 0.886275 0.933333 / 0.48) color(srgb 0.85098 0.886275 0.933333 / 0.48) color(srgb 0.85098 0.886275 0.933333 / 0.48) color(srgb 0.85098 0.886275 0.933333 / 0.72)",
+      "outline": "none 3px"
+    },
+    {
+      "i": 4,
+      "tag": "DIV",
+      "id": "mailSummary",
+      "cls": "mail-result-summary",
+      "text": "等待拉取 收件箱列表和阅读区会在同一视图内更新。 状态 待命 邮件 0 账号 0",
+      "role": null,
+      "aria": "待处理摘要",
+      "label": "邮件结果",
+      "title": null,
+      "disabled": false,
+      "ariaPressed": null,
+      "ariaSelected": null,
+      "rect": {
+        "x": 23,
+        "y": 1075,
+        "w": 344,
+        "h": 77
+      },
+      "color": "rgb(23, 32, 51)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "color(srgb 0.886275 0.909804 0.941176 / 0.566588)",
+      "outline": "none 3px"
+    }
+  ],
+  "htmlClass": "",
+  "bodyClass": ""
+}

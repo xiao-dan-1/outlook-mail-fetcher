@@ -15,6 +15,7 @@ const state = {
 
 const THEME_STORAGE_KEY = "mailReceiverTheme";
 const AUTO_PARSE_DELAY_MS = 300;
+const VERIFICATION_KEYWORD_PATTERN = /验证码|验证代码|校验码|动态码|verification|verify|code|otp|passcode|security code/i;
 let autoParseTimer = null;
 
 const el = {
@@ -23,6 +24,7 @@ const el = {
   appVersionBadge: document.getElementById("appVersionBadge"),
   themeToggle: document.getElementById("themeToggle"),
   fetchBtn: document.getElementById("fetchBtn"),
+  copyCurrentCodeBtn: document.getElementById("copyCurrentCodeBtn"),
   accountTextInput: document.getElementById("accountTextInput"),
   privacyToggle: document.getElementById("privacyToggle"),
   inputQuality: document.getElementById("inputQuality"),
@@ -41,6 +43,7 @@ const el = {
   mailDetail: document.getElementById("mailDetail"),
   runLog: document.getElementById("runLog"),
   clearLogBtn: document.getElementById("clearLogBtn"),
+  logDrawerToggle: document.getElementById("logDrawerToggle"),
 };
 
 function applyTheme(theme) {
@@ -262,6 +265,78 @@ function readableMailText(mail) {
   return cleanReadableMailSource(source);
 }
 
+function verificationSearchText(mail) {
+  return [
+    mail.subject,
+    mail.body_preview,
+    mail.snippet,
+    mail.preview,
+    readableMailPreview(mail),
+    readableMailText(mail),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function compactCodeValue(value) {
+  return String(value || "").replace(/[\s-]+/g, "");
+}
+
+function extractVerificationCode(mail) {
+  const text = verificationSearchText(mail);
+  if (!text) {
+    return {
+      code: "",
+      source: "未找到可读内容",
+      confidence: "none",
+    };
+  }
+
+  const keywordMatch = text.match(VERIFICATION_KEYWORD_PATTERN);
+  if (keywordMatch) {
+    const windowStart = Math.max(0, keywordMatch.index - 48);
+    const windowEnd = Math.min(text.length, keywordMatch.index + 180);
+    const keywordWindow = text.slice(windowStart, windowEnd);
+    const nearbyCode = keywordWindow.match(/(?<!\d)(\d[\d\s-]{2,10}\d)(?!\d)/);
+    if (nearbyCode) {
+      const code = compactCodeValue(nearbyCode[1]);
+      if (/^\d{4,8}$/.test(code)) {
+        return {
+          code,
+          source: "关键词附近",
+          confidence: "high",
+        };
+      }
+    }
+  }
+
+  const genericCode = text.match(/(?<!\d)(\d{4,8})(?!\d)/);
+  if (genericCode) {
+    return {
+      code: genericCode[1],
+      source: "正文数字",
+      confidence: "medium",
+    };
+  }
+
+  return {
+    code: "",
+    source: "未识别验证码",
+    confidence: "none",
+  };
+}
+
+function selectedMail() {
+  return allSessionMessages().find((mail) => mail.id === state.selectedEmailId) || null;
+}
+
+function verificationRows() {
+  return allSessionMessages()
+    .map((mail) => ({ mail, verification: extractVerificationCode(mail) }))
+    .filter((row) => row.verification.code);
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -272,6 +347,82 @@ async function api(path, options = {}) {
     throw new Error(data.error || `HTTP ${response.status}`);
   }
   return data;
+}
+
+function failureInsight(message, stage = "") {
+  const detail = String(message || "").trim();
+  const lowerDetail = detail.toLowerCase();
+  const normalizedStage = String(stage || "").toLowerCase();
+
+  if (
+    normalizedStage === "oauth"
+    || lowerDetail.includes("invalid_grant")
+    || detail.includes("AADSTS7000012")
+    || lowerDetail.includes("different tenant")
+  ) {
+    return {
+      title: "OAuth 授权失败",
+      summary: "刷新令牌不可用于当前租户。",
+      nextStep: "检查 client ID、租户与 refresh token 是否来自同一账号或租户，然后重试失败账号。",
+      detail: detail || "没有返回更多技术细节。",
+    };
+  }
+
+  if (lowerDetail.includes("timeout") || detail.includes("超时")) {
+    return {
+      title: "连接超时",
+      summary: "邮件服务器没有在预期时间内响应。",
+      nextStep: "检查网络、邮箱目录和账号授权后重试失败账号。",
+      detail: detail || "没有返回更多技术细节。",
+    };
+  }
+
+  if (lowerDetail.includes("authentication") || detail.includes("认证") || detail.includes("授权")) {
+    return {
+      title: "账号认证失败",
+      summary: "当前账号未通过邮件服务认证。",
+      nextStep: "重新确认密码、客户端 ID 与刷新令牌后重试失败账号。",
+      detail: detail || "没有返回更多技术细节。",
+    };
+  }
+
+  return {
+    title: "拉取失败",
+    summary: detail ? detail.replace(/\s+/g, " ").slice(0, 96) : "当前账号未能完成邮件拉取。",
+    nextStep: "检查账号格式、邮箱目录和授权状态后重试失败账号。",
+    detail: detail || "没有返回更多技术细节。",
+  };
+}
+
+function failureLogMessage(email, message, stage = "") {
+  const insight = failureInsight(message, stage);
+  const accountLabel = email || "当前账号";
+  return `${accountLabel}: ${insight.title}：${insight.summary} ${insight.nextStep}`;
+}
+
+function latestFailureMessage() {
+  if (state.failedRows.length) {
+    return state.failedRows[0].error || "";
+  }
+  const failedStatus = Array.from(state.accountStatus.values()).find((status) => status?.kind === "fail");
+  return failedStatus?.error || "";
+}
+
+function failureSummaryText(message = latestFailureMessage()) {
+  const insight = failureInsight(message);
+  return `${insight.title}：${insight.summary}\n下一步：${insight.nextStep}`;
+}
+
+function failureAccessibilityLabel(status) {
+  if (!status) {
+    return "待拉取";
+  }
+  if (status.kind !== "fail") {
+    return accountStatusLabel(status);
+  }
+  const insight = failureInsight(status.error, status.stage);
+  const diagnostic = accountDiagnosticText(status);
+  return `失败，${statusStageLabel(status.stage)}，耗时 ${formatElapsedTime(status.elapsed_ms)}，${insight.title}，${insight.summary}${diagnostic ? `，${diagnostic}` : ""}`;
 }
 
 function compactStatusText(text, tone = "ready") {
@@ -491,12 +642,12 @@ function messagesForAccount(email) {
   return state.messagesByAccount.get(email) || [];
 }
 
-function visibleMessages() {
-  return messagesForAccount(state.activeAccountEmail);
-}
-
 function allSessionMessages() {
   return Array.from(state.messagesByAccount.values()).flat();
+}
+
+function visibleMessages() {
+  return state.activeAccountEmail ? messagesForAccount(state.activeAccountEmail) : allSessionMessages();
 }
 
 function ensureActiveAccount(accounts = state.accounts) {
@@ -706,6 +857,89 @@ async function copyAccountEmail(email) {
   }
 }
 
+async function copyFailureSummary() {
+  try {
+    await writeClipboardText(failureSummaryText());
+    setStatus("已复制错误摘要", "success");
+    appendLog("已复制错误摘要", "ok");
+  } catch (error) {
+    setStatus("复制错误摘要失败", "error");
+    appendLog(`复制错误摘要失败：${error.message}`, "fail");
+  }
+}
+
+function syncSessionActions() {
+  const currentMail = selectedMail();
+  const currentCode = currentMail ? extractVerificationCode(currentMail).code : "";
+
+  if (el.copyCurrentCodeBtn) {
+    el.copyCurrentCodeBtn.disabled = !currentCode;
+    el.copyCurrentCodeBtn.setAttribute("aria-disabled", String(!currentCode));
+    el.copyCurrentCodeBtn.title = currentCode ? `复制当前验证码 ${currentCode}` : "当前邮件未识别验证码";
+  }
+}
+
+async function copyCurrentVerificationCode() {
+  const mail = selectedMail();
+  const verification = mail ? extractVerificationCode(mail) : { code: "" };
+  if (!verification.code) {
+    setStatus("未识别验证码", "warning");
+    return;
+  }
+  try {
+    await writeClipboardText(verification.code);
+    setStatus("已复制当前验证码", "success");
+    appendLog(`验证码已复制：${mail.account_email || "当前邮件"}`, "ok");
+  } catch (error) {
+    setStatus("复制验证码失败", "error");
+    appendLog(`复制验证码失败：${error.message}`, "fail");
+  }
+}
+
+async function retryFailedAccounts() {
+  const failedEmails = state.failedRows.map((row) => row.email).filter(Boolean);
+  if (!failedEmails.length) {
+    setStatus("暂无失败账号", "ready");
+    return;
+  }
+  try {
+    await ensureParsed();
+    setBusy(true, "正在重试失败账号");
+    const summary = { fetched: 0, failed: 0 };
+    for (const email of failedEmails) {
+      const account = state.accounts.find((item) => item.email === email);
+      if (!account) {
+        continue;
+      }
+      state.accountStatus.set(email, { kind: "busy" });
+      renderAccounts(state.accounts);
+      setStatus(`正在重试 ${email}`, "busy");
+      const accountData = await fetchOneAccount(account);
+      renderFetchResult(accountData);
+      summary.fetched += accountData.fetched;
+      summary.failed += accountData.failed;
+    }
+    setStatus(`重试完成：邮件 ${summary.fetched}，失败 ${summary.failed}`, summary.failed ? "warning" : "success");
+  } catch (error) {
+    addLog(`重试失败：${error.message}`, "fail");
+    setStatus("重试失败", "error");
+  } finally {
+    setBusy(false);
+    syncSessionActions();
+  }
+}
+
+function toggleLogDrawer() {
+  const panel = document.querySelector(".run-log-panel");
+  const nextOpen = !panel?.classList.contains("is-open");
+  panel?.classList.toggle("is-open", nextOpen);
+  panel?.classList.toggle("is-collapsed", !nextOpen);
+  el.logDrawerToggle?.setAttribute("aria-expanded", String(nextOpen));
+  if (el.logDrawerToggle) {
+    el.logDrawerToggle.textContent = nextOpen ? "收起日志" : "展开日志";
+  }
+}
+
 function mailEmptyIconMarkup() {
   return `<span class="mail-empty-icon"><svg class="icon" aria-hidden="true"><use href="#icon-outlook"></use></svg></span>`;
 }
@@ -813,20 +1047,27 @@ function mailLoadingRailMarkup() {
 }
 
 function mailErrorDetailMarkup(detail) {
+  const insight = failureInsight(detail);
   return `
     <div class="mail-error-detail" aria-label="错误详情">
-      <span>错误详情</span>
-      <strong class="mail-error-code">${escapeHtml(detail)}</strong>
+      <span>${escapeHtml(insight.title)}</span>
+      <strong class="mail-error-code">${escapeHtml(insight.summary)}</strong>
+      <p class="mail-error-next-step">${escapeHtml(insight.nextStep)}</p>
+      <details class="mail-error-technical">
+        <summary>查看技术详情</summary>
+        <code>${escapeHtml(insight.detail)}</code>
+      </details>
     </div>
   `;
 }
 
-function mailErrorDiagnosticsMarkup() {
+function mailErrorDiagnosticsMarkup(detail) {
+  const insight = failureInsight(detail);
   return `
     <div class="mail-error-diagnostics" aria-label="恢复建议">
       <div class="mail-error-diagnostic-item">
         <span>恢复建议</span>
-        <strong>重新授权或调整账号后重试</strong>
+        <strong title="重新授权或调整账号后重试">${escapeHtml(insight.nextStep)}</strong>
       </div>
       <div class="mail-error-diagnostic-item">
         <span>保留运行记录</span>
@@ -841,7 +1082,10 @@ function mailErrorActionsMarkup() {
     <div class="mail-error-actions">
       <button type="button" class="button secondary mail-error-retry">
         <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
-        重新拉取
+        重新拉取失败账号
+      </button>
+      <button type="button" class="button ghost mail-error-copy">
+        复制错误摘要
       </button>
       <button type="button" class="button ghost mail-error-log-link">
         查看运行记录
@@ -918,8 +1162,9 @@ function renderMailLoadingState(label) {
 
 function renderMailErrorState(message) {
   const detail = message || "IMAP 拉取未完成";
+  const insight = failureInsight(detail);
   setMailBusyState(false);
-  renderMailSummary([], { kind: "error", label: "拉取失败", description: "当前会话未能完成拉取，请查看运行记录，调整账号或目录后重新拉取。" });
+  renderMailSummary([], { kind: "error", label: insight.title, description: `${insight.summary} ${insight.nextStep}` });
   state.selectedEmailId = null;
   el.mailList.classList.add("empty");
   el.mailList.removeAttribute("aria-activedescendant");
@@ -928,7 +1173,7 @@ function renderMailErrorState(message) {
       <div class="mail-error-compact-card">
         <span class="mail-empty-icon is-error"><svg class="icon" aria-hidden="true"><use href="#icon-clear"></use></svg></span>
         <div>
-          <strong>拉取未完成</strong>
+          <strong>${escapeHtml(insight.title)}</strong>
           <span>查看详情面板或运行记录，调整后可重新拉取。</span>
         </div>
       </div>
@@ -939,9 +1184,9 @@ function renderMailErrorState(message) {
   el.mailDetail.innerHTML = `
     <div class="mail-detail-placeholder mail-error-panel" aria-label="拉取失败详情">
       <span class="mail-empty-icon is-error"><svg class="icon" aria-hidden="true"><use href="#icon-clear"></use></svg></span>
-      <strong>当前会话未能完成拉取</strong>
-      <span>请查看运行记录，调整账号或目录后重新拉取。</span>
-      ${mailErrorDiagnosticsMarkup()}
+      <strong>${escapeHtml(insight.title)}</strong>
+      <span>${escapeHtml(insight.summary)}</span>
+      ${mailErrorDiagnosticsMarkup(detail)}
       ${mailErrorDetailMarkup(detail)}
       ${mailErrorActionsMarkup()}
     </div>
@@ -950,13 +1195,27 @@ function renderMailErrorState(message) {
     ...el.mailList.querySelectorAll(".mail-error-retry"),
     ...el.mailDetail.querySelectorAll(".mail-error-retry"),
   ]) {
-    button.addEventListener("click", fetchMail);
+    wireMailErrorRetryButton(button);
+  }
+  for (const button of [
+    ...el.mailList.querySelectorAll(".mail-error-copy"),
+    ...el.mailDetail.querySelectorAll(".mail-error-copy"),
+  ]) {
+    button.addEventListener("click", copyFailureSummary);
   }
   for (const button of [
     ...el.mailList.querySelectorAll(".mail-error-log-link"),
     ...el.mailDetail.querySelectorAll(".mail-error-log-link"),
   ]) {
     button.addEventListener("click", focusRunLog);
+  }
+}
+
+function wireMailErrorRetryButton(button) {
+  if (state.failedRows.length) {
+    button.addEventListener("click", retryFailedAccounts);
+  } else {
+    button.addEventListener("click", fetchMail);
   }
 }
 
@@ -1031,7 +1290,8 @@ function accountStatusLabel(status) {
     return `已拉取，${status.fetched} 封，耗时 ${formatElapsedTime(status.elapsed_ms)}${diagnostic ? `，${diagnostic}` : ""}`;
   }
   const diagnostic = accountDiagnosticText(status);
-  return `失败，${statusStageLabel(status.stage)}，耗时 ${formatElapsedTime(status.elapsed_ms)}${diagnostic ? `，${diagnostic}` : ""}${status.error ? `，${status.error}` : ""}`;
+  const insight = failureInsight(status.error, status.stage);
+  return `失败，${statusStageLabel(status.stage)}，耗时 ${formatElapsedTime(status.elapsed_ms)}${diagnostic ? `，${diagnostic}` : ""}，${insight.title}：${insight.summary}`;
 }
 
 function accountFailureCount() {
@@ -1121,7 +1381,7 @@ function renderAccounts(accounts) {
     const selectButton = document.createElement("button");
     selectButton.type = "button";
     selectButton.className = "account-select-button";
-    selectButton.setAttribute("aria-label", `${account.email}，${isSelected ? "当前选中，" : ""}${accountStatusLabel(status)}`);
+    selectButton.setAttribute("aria-label", `${account.email}，${isSelected ? "当前选中，" : ""}${failureAccessibilityLabel(status)}`);
     selectButton.setAttribute("aria-pressed", String(isSelected));
     selectButton.innerHTML = `
       <div class="account-row-head">
@@ -1188,15 +1448,20 @@ function renderFetchResult(data) {
         timings: row.timings || {},
         error: row.error,
       });
-      addLog(`${row.email}: ${row.error}，耗时 ${formatElapsedTime(row.elapsed_ms)}，下载 ${formatBytes(row.raw_bytes)}，阶段 ${formatTimingBreakdown(row.timings)}`, "fail");
+      addLog(`${failureLogMessage(row.email, row.error, row.stage)}，耗时 ${formatElapsedTime(row.elapsed_ms)}，下载 ${formatBytes(row.raw_bytes)}，阶段 ${formatTimingBreakdown(row.timings)}`, "fail");
     }
   }
   state.failedRows = Array.from(failedByEmail.values());
   mergeFetchedMessagesByAccount(data.rows, data.messages || []);
   ensureActiveAccount();
   renderAccounts(state.accounts);
-  renderResults(visibleMessages());
-  selectInitialMessage(visibleMessages());
+  const results = visibleMessages();
+  if (!results.length && state.failedRows.length) {
+    renderMailErrorState(latestFailureMessage());
+  } else {
+    renderResults(results);
+    selectInitialMessage(results);
+  }
 }
 
 function renderMailSummary(results, options = {}) {
@@ -1256,6 +1521,7 @@ function renderResults(results) {
     state.selectedEmailId = null;
     renderMailDetailPlaceholder();
     el.mailList.innerHTML = mailListEmptyMarkup();
+    syncSessionActions();
     return;
   }
 
@@ -1264,6 +1530,7 @@ function renderResults(results) {
     const displayDate = formatMailDate(mail.sent_at);
     const senderName = senderDisplayName(mail.sender);
     const senderAddressText = senderAddress(mail.sender);
+    const senderInitialValue = senderInitial(mail.sender);
     const button = document.createElement("button");
     const isSelected = mail.id === state.selectedEmailId;
     button.type = "button";
@@ -1276,19 +1543,25 @@ function renderResults(results) {
     button.setAttribute("aria-label", `${mail.subject || "(无主题)"}，${senderName}，${mail.account_email || "未知账号"}，${displayDate}`);
     button.innerHTML = `
       <div class="mail-row-main">
-        <span class="mail-row-status-dot" aria-hidden="true"></span>
-        <strong class="subject">${escapeHtml(mail.subject || "(无主题)")}</strong>
+        <span class="mail-row-avatar" aria-hidden="true">${escapeHtml(senderInitialValue)}</span>
+        <span class="mail-row-title-group">
+          <span class="mail-row-title-line">
+            <span class="mail-row-status-dot" aria-hidden="true"></span>
+            <strong class="subject">${escapeHtml(mail.subject || "(无主题)")}</strong>
+          </span>
+          <span class="mail-row-meta-line">
+            <span class="mail-row-sender" title="${escapeHtml(senderAddressText)}">${escapeHtml(senderName)}</span>
+            <span class="mail-row-account" title="${escapeHtml(mail.account_email || "-")}">${escapeHtml(mail.account_email || "-")}</span>
+          </span>
+          <span class="mail-row-preview">${escapeHtml(preview)}</span>
+        </span>
         <span class="mail-time">${escapeHtml(displayDate)}</span>
       </div>
-      <div class="mail-row-meta-line">
-        <span class="mail-row-sender" title="${escapeHtml(senderAddressText)}">${escapeHtml(senderName)}</span>
-        <span class="mail-row-account" title="${escapeHtml(mail.account_email || "-")}">${escapeHtml(mail.account_email || "-")}</span>
-      </div>
-      <div class="mail-row-preview">${escapeHtml(preview)}</div>
     `;
     button.addEventListener("click", () => showEmail(mail.id));
     el.mailList.append(button);
   }
+  syncSessionActions();
 }
 
 function selectInitialMessage(results = visibleMessages()) {
@@ -1336,6 +1609,34 @@ function handleMailListKeydown(event) {
   focusSelectedMail();
 }
 
+function confidenceLabel(confidence) {
+  if (confidence === "high") {
+    return "高置信";
+  }
+  if (confidence === "medium") {
+    return "中置信";
+  }
+  return "未识别";
+}
+
+function verificationCodeCardMarkup(mail) {
+  const verification = extractVerificationCode(mail);
+  const hasCode = Boolean(verification.code);
+  const displayCode = hasCode ? verification.code : "未识别验证码";
+  return `
+    <section class="verification-card" aria-label="验证码摘要">
+      <div class="verification-card-copy">
+        <span class="verification-eyebrow">验证码摘要</span>
+        <strong class="verification-code-value" title="${hasCode ? escapeHtml(verification.code) : "未识别验证码"}">${escapeHtml(displayCode)}</strong>
+        <span class="verification-source">${escapeHtml(verification.source)} · ${escapeHtml(confidenceLabel(verification.confidence))}</span>
+      </div>
+      <button type="button" class="button secondary copy-current-code-inline" data-code-action="copy-current" ${hasCode ? "" : "disabled aria-disabled=\"true\""}>
+        复制验证码
+      </button>
+    </section>
+  `;
+}
+
 function renderDetail(mail) {
   setMailBusyState(false);
   state.selectedEmailId = mail.id;
@@ -1358,6 +1659,7 @@ function renderDetail(mail) {
         <span class="pill">${escapeHtml(mail.mailbox)}</span>
       </div>
     </div>
+    ${verificationCodeCardMarkup(mail)}
     <div class="detail-summary-bar" aria-label="邮件摘要">
       <div class="detail-summary-item">
         <span>账号</span>
@@ -1398,6 +1700,8 @@ function renderDetail(mail) {
       <pre class="body-preview">${escapeHtml(readableBody)}</pre>
     </section>
   `;
+  el.mailDetail.querySelector("[data-code-action=\"copy-current\"]")?.addEventListener("click", copyCurrentVerificationCode);
+  syncSessionActions();
 }
 
 async function loadConfig() {
@@ -1491,6 +1795,7 @@ async function fetchMail() {
     setStatus("拉取失败", "error");
   } finally {
     setBusy(false);
+    syncSessionActions();
   }
 }
 
@@ -1527,6 +1832,8 @@ initTheme();
 
 el.themeToggle.addEventListener("click", toggleTheme);
 el.fetchBtn.addEventListener("click", fetchMail);
+el.copyCurrentCodeBtn?.addEventListener("click", copyCurrentVerificationCode);
+el.logDrawerToggle?.addEventListener("click", toggleLogDrawer);
 el.mailList.addEventListener("keydown", handleMailListKeydown);
 el.limitInput.addEventListener("change", () => {
   el.limitInput.value = normalizeLimit(el.limitInput.value);
@@ -1566,6 +1873,7 @@ el.clearLogBtn.addEventListener("click", () => {
 syncActionAvailability();
 syncLogActions();
 syncAccountPrivacy();
+syncSessionActions();
 renderInputQuality();
 setStatus("准备就绪", "ready");
 

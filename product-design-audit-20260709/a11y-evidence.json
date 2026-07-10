@@ -1,0 +1,537 @@
+{
+  "a11y": {
+    "url": "http://127.0.0.1:8765/",
+    "fieldNames": [
+      {
+        "tag": "TEXTAREA",
+        "type": "textarea",
+        "id": "accountTextInput",
+        "name": "",
+        "placeholder": "邮箱----密码----客户端 ID----刷新令牌",
+        "labels": [
+          "粘贴账号"
+        ],
+        "ariaLabel": null,
+        "labelledby": null,
+        "title": "每行一个账号：邮箱----密码----客户端 ID----刷新令牌；粘贴后自动遮蔽敏感字段",
+        "rect": {
+          "x": 38,
+          "y": 202,
+          "w": 602,
+          "h": 72
+        }
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "id": "mailboxInput",
+        "name": "",
+        "placeholder": null,
+        "labels": [
+          "邮箱目录"
+        ],
+        "ariaLabel": null,
+        "labelledby": null,
+        "title": null,
+        "rect": {
+          "x": 738,
+          "y": 186,
+          "w": 457,
+          "h": 32
+        }
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "id": "limitInput",
+        "name": "",
+        "placeholder": null,
+        "labels": [
+          "每账号最多"
+        ],
+        "ariaLabel": null,
+        "labelledby": null,
+        "title": null,
+        "rect": {
+          "x": 1345,
+          "y": 186,
+          "w": 44,
+          "h": 32
+        }
+      },
+      {
+        "tag": "INPUT",
+        "type": "checkbox",
+        "id": "rawFetchToggle",
+        "name": "",
+        "placeholder": null,
+        "labels": [
+          "完整原文 RFC822 · 较慢"
+        ],
+        "ariaLabel": null,
+        "labelledby": null,
+        "title": null,
+        "rect": {
+          "x": 687,
+          "y": 286,
+          "w": 12,
+          "h": 12
+        }
+      }
+    ],
+    "buttons": [
+      {
+        "id": "themeToggle",
+        "text": "浅色 深色",
+        "ariaLabel": "切换浅色或深色主题",
+        "ariaPressed": "false",
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": false,
+        "ariaDisabled": null,
+        "title": null,
+        "rect": {
+          "x": 1080,
+          "y": 48,
+          "w": 122,
+          "h": 40
+        }
+      },
+      {
+        "id": "privacyToggle",
+        "text": "隐私保护",
+        "ariaLabel": null,
+        "ariaPressed": "true",
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": "输入后自动遮蔽敏感字段",
+        "rect": {
+          "x": 500,
+          "y": 146,
+          "w": 64,
+          "h": 24
+        }
+      },
+      {
+        "id": "selectedScopeBtn",
+        "text": "选中账号",
+        "ariaLabel": null,
+        "ariaPressed": "true",
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": null,
+        "rect": {
+          "x": 683,
+          "y": 235,
+          "w": 352,
+          "h": 30
+        }
+      },
+      {
+        "id": "allScopeBtn",
+        "text": "全部账号",
+        "ariaLabel": null,
+        "ariaPressed": "false",
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": null,
+        "rect": {
+          "x": 1037,
+          "y": 235,
+          "w": 352,
+          "h": 30
+        }
+      },
+      {
+        "id": "fetchBtn",
+        "text": "拉取邮件",
+        "ariaLabel": null,
+        "ariaPressed": null,
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": "请先粘贴账号信息",
+        "rect": {
+          "x": 680,
+          "y": 362,
+          "w": 712,
+          "h": 38
+        }
+      },
+      {
+        "id": "copyCurrentCodeBtn",
+        "text": "复制当前验证码",
+        "ariaLabel": null,
+        "ariaPressed": null,
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": "当前邮件未识别验证码",
+        "rect": {
+          "x": 680,
+          "y": 412,
+          "w": 137,
+          "h": 38
+        }
+      },
+      {
+        "id": "copyAllCodesBtn",
+        "text": "复制全部验证码",
+        "ariaLabel": null,
+        "ariaPressed": null,
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": "本次结果暂无验证码",
+        "rect": {
+          "x": 824,
+          "y": 412,
+          "w": 137,
+          "h": 38
+        }
+      },
+      {
+        "id": "exportResultsBtn",
+        "text": "导出结果",
+        "ariaLabel": null,
+        "ariaPressed": null,
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": "本次暂无可导出结果",
+        "rect": {
+          "x": 968,
+          "y": 412,
+          "w": 137,
+          "h": 38
+        }
+      },
+      {
+        "id": "retryFailedBtn",
+        "text": "重试失败账号",
+        "ariaLabel": null,
+        "ariaPressed": null,
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": "暂无失败账号",
+        "rect": {
+          "x": 1111,
+          "y": 412,
+          "w": 137,
+          "h": 38
+        }
+      },
+      {
+        "id": "codePrivacyToggle",
+        "text": "隐私模式",
+        "ariaLabel": null,
+        "ariaPressed": "false",
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": false,
+        "ariaDisabled": null,
+        "title": null,
+        "rect": {
+          "x": 1255,
+          "y": 412,
+          "w": 137,
+          "h": 38
+        }
+      },
+      {
+        "id": "logDrawerToggle",
+        "text": "展开日志",
+        "ariaLabel": null,
+        "ariaPressed": null,
+        "ariaExpanded": "false",
+        "ariaControls": null,
+        "disabled": false,
+        "ariaDisabled": null,
+        "title": null,
+        "rect": {
+          "x": 1253,
+          "y": 945,
+          "w": 66,
+          "h": 28
+        }
+      },
+      {
+        "id": "clearLogBtn",
+        "text": "清空记录",
+        "ariaLabel": null,
+        "ariaPressed": null,
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": true,
+        "ariaDisabled": "true",
+        "title": "暂无运行记录",
+        "rect": {
+          "x": 1324,
+          "y": 945,
+          "w": 86,
+          "h": 28
+        }
+      },
+      {
+        "id": "",
+        "text": "全部",
+        "ariaLabel": null,
+        "ariaPressed": "true",
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": false,
+        "ariaDisabled": null,
+        "title": null,
+        "rect": {
+          "x": 44,
+          "y": 979,
+          "w": 48,
+          "h": 28
+        }
+      },
+      {
+        "id": "",
+        "text": "单账号",
+        "ariaLabel": null,
+        "ariaPressed": "false",
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": false,
+        "ariaDisabled": null,
+        "title": null,
+        "rect": {
+          "x": 98,
+          "y": 979,
+          "w": 60,
+          "h": 28
+        }
+      },
+      {
+        "id": "",
+        "text": "失败账号",
+        "ariaLabel": null,
+        "ariaPressed": "false",
+        "ariaExpanded": null,
+        "ariaControls": null,
+        "disabled": false,
+        "ariaDisabled": null,
+        "title": null,
+        "rect": {
+          "x": 164,
+          "y": 979,
+          "w": 72,
+          "h": 28
+        }
+      }
+    ],
+    "focusableDomOrder": [
+      {
+        "i": 0,
+        "tag": "BUTTON",
+        "id": "themeToggle",
+        "text": "浅色 深色",
+        "rect": {
+          "x": 1080,
+          "y": 48,
+          "w": 122,
+          "h": 40
+        }
+      },
+      {
+        "i": 1,
+        "tag": "TEXTAREA",
+        "id": "accountTextInput",
+        "text": "",
+        "rect": {
+          "x": 38,
+          "y": 202,
+          "w": 602,
+          "h": 72
+        }
+      },
+      {
+        "i": 2,
+        "tag": "INPUT",
+        "id": "mailboxInput",
+        "text": "",
+        "rect": {
+          "x": 738,
+          "y": 186,
+          "w": 457,
+          "h": 32
+        }
+      },
+      {
+        "i": 3,
+        "tag": "INPUT",
+        "id": "limitInput",
+        "text": "",
+        "rect": {
+          "x": 1345,
+          "y": 186,
+          "w": 44,
+          "h": 32
+        }
+      },
+      {
+        "i": 4,
+        "tag": "INPUT",
+        "id": "rawFetchToggle",
+        "text": "",
+        "rect": {
+          "x": 687,
+          "y": 286,
+          "w": 12,
+          "h": 12
+        }
+      },
+      {
+        "i": 5,
+        "tag": "BUTTON",
+        "id": "codePrivacyToggle",
+        "text": "隐私模式",
+        "rect": {
+          "x": 1255,
+          "y": 412,
+          "w": 137,
+          "h": 38
+        }
+      },
+      {
+        "i": 6,
+        "tag": "BUTTON",
+        "id": "logDrawerToggle",
+        "text": "展开日志",
+        "rect": {
+          "x": 1253,
+          "y": 945,
+          "w": 66,
+          "h": 28
+        }
+      },
+      {
+        "i": 7,
+        "tag": "BUTTON",
+        "id": "",
+        "text": "全部",
+        "rect": {
+          "x": 44,
+          "y": 979,
+          "w": 48,
+          "h": 28
+        }
+      },
+      {
+        "i": 8,
+        "tag": "BUTTON",
+        "id": "",
+        "text": "单账号",
+        "rect": {
+          "x": 98,
+          "y": 979,
+          "w": 60,
+          "h": 28
+        }
+      },
+      {
+        "i": 9,
+        "tag": "BUTTON",
+        "id": "",
+        "text": "失败账号",
+        "rect": {
+          "x": 164,
+          "y": 979,
+          "w": 72,
+          "h": 28
+        }
+      }
+    ],
+    "viewport": {
+      "w": 1440,
+      "h": 1000,
+      "scrollW": 1440,
+      "scrollH": 1560
+    },
+    "liveRegions": [
+      {
+        "tag": "DIV",
+        "role": null,
+        "ariaLive": "polite",
+        "text": "系统状态 准备就绪",
+        "rect": {
+          "x": 1212,
+          "y": 39,
+          "w": 188,
+          "h": 58
+        }
+      },
+      {
+        "tag": "DIV",
+        "role": null,
+        "ariaLive": "polite",
+        "text": "等待输入 粘贴后会即时检查行数与基础格式，不展示敏感字段。",
+        "rect": {
+          "x": 38,
+          "y": 280,
+          "w": 602,
+          "h": 44
+        }
+      },
+      {
+        "tag": "DIV",
+        "role": null,
+        "ariaLive": "polite",
+        "text": "会话模式 先解析账号 · 默认单号 · 快速预览",
+        "rect": {
+          "x": 680,
+          "y": 318,
+          "w": 712,
+          "h": 34
+        }
+      },
+      {
+        "tag": "DIV",
+        "role": "log",
+        "ariaLive": "polite",
+        "text": "",
+        "rect": {
+          "x": 30,
+          "y": 1010,
+          "w": 1380,
+          "h": 80
+        }
+      },
+      {
+        "tag": "DIV",
+        "role": null,
+        "ariaLive": "polite",
+        "text": "等待拉取 收件箱列表和阅读区会在同一视图内更新。 状态 待命 邮件 0 账号 0",
+        "rect": {
+          "x": 40,
+          "y": 736,
+          "w": 1360,
+          "h": 55
+        }
+      }
+    ]
+  },
+  "mobileInfo": {
+    "w": 390,
+    "h": 844,
+    "scrollW": 390,
+    "scrollH": 1796,
+    "bodyText": "Outlook 邮件\n\n账号校验、IMAP 拉取与本次结果审阅\nv0.1.0\n\n浅色\n深色\n系统状态\n准备就绪\n账号管理\n隐私保护\n0 个账号\n粘贴账号\n等待输入\n粘贴后会即时检查行数与基础格式，不展示敏感字段。\n账号状态\n等待账号输入\n粘贴账号后会自动解析，并显示拉取状态。\n只显示邮箱\n隐藏密钥\n控制台\n邮箱目录\n每账号最多\n选中账号\n全部账号\n完整原文\nRFC822 · 较慢\n会话模式\n先解析账号 · 默认单号 · 快速预览\n拉取邮件\n复制当前验证码\n复制全部验证码\n导出结果\n重试失败账号\n隐私模式\n运行日志\n展开日志\n清空记录\n会话事件\n最新优先\n邮件结果\n等待拉取\n收件箱列表和阅读区会在同一视图内更新。\n状态\n待命\n邮件\n0\n账号\n0\n全部\n单账号\n失败账号\n等待本次拉取\n拉取成功后会在这里显示最近邮件，并自动选中第一封。\n账号解析\nIMAP 拉取\n自动选中\n选择邮件查看详情\n主题、来源、收件人和正文预览会在选中邮件后展开。\n当前会话预览\n关键头信息"
+  }
+}
