@@ -16,6 +16,48 @@ const state = {
 const THEME_STORAGE_KEY = "mailReceiverTheme";
 const AUTO_PARSE_DELAY_MS = 300;
 const VERIFICATION_KEYWORD_PATTERN = /验证码|验证代码|校验码|动态码|verification|verify|code|otp|passcode|security code/i;
+// Provider-specific rules run before the generic fallback. Add new providers above "generic".
+const VERIFICATION_PROVIDERS = [
+  {
+    id: "xai",
+    label: "xAI",
+    source: "xAI 确认码",
+    identityPatterns: [/x\.ai/i, /xai/i, /grok/i],
+    keywords: [/confirmation code/i, /verification code/i, /security code/i],
+    codePatterns: [
+      {
+        pattern: /(?<![A-Z0-9])([A-Z0-9]{3}[-\s][A-Z0-9]{3})(?![A-Z0-9])/i,
+        preserveSeparator: true,
+        validator: /^[A-Z0-9]{6}$/i,
+      },
+      {
+        pattern: /(?:confirmation code|verification code|security code|验证码)[^A-Z0-9]{0,48}([A-Z0-9][A-Z0-9\s-]{2,10}[A-Z0-9])/i,
+        preserveSeparator: true,
+        validator: /^[A-Z0-9]{4,8}$/i,
+      },
+    ],
+  },
+  {
+    id: "generic",
+    label: "通用",
+    source: "关键词附近",
+    keywords: [VERIFICATION_KEYWORD_PATTERN],
+    codePatterns: [
+      {
+        pattern: /(?<!\d)(\d[\d\s-]{2,10}\d)(?!\d)/,
+        validator: /^\d{4,8}$/,
+      },
+    ],
+    fallbackCodePatterns: [
+      {
+        pattern: /(?<!\d)(\d{4,8})(?!\d)/,
+        source: "正文数字",
+        confidence: "medium",
+        validator: /^\d{4,8}$/,
+      },
+    ],
+  },
+];
 let autoParseTimer = null;
 
 const el = {
@@ -256,6 +298,8 @@ function readableMailText(mail) {
 function verificationSearchText(mail) {
   return [
     mail.subject,
+    mail.sender,
+    mail.recipients,
     mail.body_preview,
     mail.snippet,
     mail.preview,
@@ -267,8 +311,92 @@ function verificationSearchText(mail) {
     .join("\n");
 }
 
+function normalizeVerificationCode(value, options = {}) {
+  const raw = String(value || "").trim();
+  if (options.preserveSeparator) {
+    return raw
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .toUpperCase();
+  }
+  return raw.replace(/[\s-]+/g, "").toUpperCase();
+}
+
 function compactCodeValue(value) {
-  return String(value || "").replace(/[\s-]+/g, "");
+  return normalizeVerificationCode(value);
+}
+
+function compactComparableCode(value) {
+  return String(value || "").replace(/[\s-]+/g, "").toUpperCase();
+}
+
+function providerMatchesText(provider, text) {
+  return !provider.identityPatterns?.length || provider.identityPatterns.some((pattern) => pattern.test(text));
+}
+
+function providerKeywordWindows(text, provider) {
+  const windows = [];
+  for (const keyword of provider.keywords || []) {
+    const keywordMatch = text.match(keyword);
+    if (!keywordMatch) {
+      continue;
+    }
+    const windowStart = Math.max(0, keywordMatch.index - 64);
+    const windowEnd = Math.min(text.length, keywordMatch.index + 180);
+    windows.push({
+      text: text.slice(windowStart, windowEnd),
+      source: provider.source || "关键词附近",
+      confidence: "high",
+    });
+  }
+  return windows;
+}
+
+function codeCandidateFromRule(provider, rule, windowInfo) {
+  const match = windowInfo.text.match(rule.pattern);
+  if (!match) {
+    return null;
+  }
+  const rawCode = match[1] || match[0];
+  const code = normalizeVerificationCode(rawCode, rule);
+  const comparableCode = compactComparableCode(code);
+  if (rule.validator && !rule.validator.test(comparableCode)) {
+    return null;
+  }
+  return {
+    code,
+    source: rule.source || windowInfo.source,
+    confidence: rule.confidence || windowInfo.confidence,
+    provider: provider.id,
+    providerLabel: provider.label,
+  };
+}
+
+function providerVerificationCandidate(provider, text) {
+  if (provider.identityPatterns?.length && !providerMatchesText(provider, text)) {
+    return null;
+  }
+
+  for (const windowInfo of providerKeywordWindows(text, provider)) {
+    for (const rule of provider.codePatterns || []) {
+      const candidate = codeCandidateFromRule(provider, rule, windowInfo);
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
+  for (const rule of provider.fallbackCodePatterns || []) {
+    const candidate = codeCandidateFromRule(provider, rule, {
+      text,
+      source: rule.source || "正文数字",
+      confidence: rule.confidence || "medium",
+    });
+    if (candidate) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 function extractVerificationCode(mail) {
@@ -281,31 +409,11 @@ function extractVerificationCode(mail) {
     };
   }
 
-  const keywordMatch = text.match(VERIFICATION_KEYWORD_PATTERN);
-  if (keywordMatch) {
-    const windowStart = Math.max(0, keywordMatch.index - 48);
-    const windowEnd = Math.min(text.length, keywordMatch.index + 180);
-    const keywordWindow = text.slice(windowStart, windowEnd);
-    const nearbyCode = keywordWindow.match(/(?<!\d)(\d[\d\s-]{2,10}\d)(?!\d)/);
-    if (nearbyCode) {
-      const code = compactCodeValue(nearbyCode[1]);
-      if (/^\d{4,8}$/.test(code)) {
-        return {
-          code,
-          source: "关键词附近",
-          confidence: "high",
-        };
-      }
+  for (const provider of VERIFICATION_PROVIDERS) {
+    const candidate = providerVerificationCandidate(provider, text);
+    if (candidate) {
+      return candidate;
     }
-  }
-
-  const genericCode = text.match(/(?<!\d)(\d{4,8})(?!\d)/);
-  if (genericCode) {
-    return {
-      code: genericCode[1],
-      source: "正文数字",
-      confidence: "medium",
-    };
   }
 
   return {
@@ -866,8 +974,9 @@ function renderOperationCodeSummary(currentMail) {
   const currentCode = verification.code;
   const hasCode = Boolean(currentCode);
   const title = currentCode || (currentMail ? "未识别验证码" : "等待邮件");
+  const providerPrefix = verification.providerLabel ? `${verification.providerLabel} · ` : "";
   const detail = currentMail
-    ? `${verification.source} · ${confidenceLabel(verification.confidence)}`
+    ? `${providerPrefix}${verification.source} · ${confidenceLabel(verification.confidence)}`
     : "拉取后随选中邮件更新";
 
   el.currentCodeSummary.className = "operation-code-summary operation-verification-card verification-card";
@@ -1605,12 +1714,13 @@ function verificationCodeCardMarkup(mail) {
   const verification = extractVerificationCode(mail);
   const hasCode = Boolean(verification.code);
   const displayCode = hasCode ? verification.code : "未识别验证码";
+  const providerPrefix = verification.providerLabel ? `${verification.providerLabel} · ` : "";
   return `
     <section class="verification-card" aria-label="验证码摘要">
       <div class="verification-card-copy">
         <span class="verification-eyebrow">验证码摘要</span>
         <strong class="verification-code-value" title="${hasCode ? escapeHtml(verification.code) : "未识别验证码"}">${escapeHtml(displayCode)}</strong>
-        <span class="verification-source">${escapeHtml(verification.source)} · ${escapeHtml(confidenceLabel(verification.confidence))}</span>
+        <span class="verification-source">${escapeHtml(providerPrefix)}${escapeHtml(verification.source)} · ${escapeHtml(confidenceLabel(verification.confidence))}</span>
       </div>
       <button type="button" class="button secondary copy-current-code-inline" data-code-action="copy-current" ${hasCode ? "" : "disabled aria-disabled=\"true\""}>
         复制验证码

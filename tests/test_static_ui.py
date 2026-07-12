@@ -212,6 +212,29 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("justify-self: start", verification_button)
         self.assertNotIn(".verification-card[data-privacy=\"hidden\"]", css)
 
+    def test_verification_parser_uses_provider_registry_for_xai_codes(self) -> None:
+        js = STATIC_JS.read_text(encoding="utf-8")
+
+        self.assertIn("const VERIFICATION_PROVIDERS", js)
+        self.assertIn('id: "xai"', js)
+        self.assertIn('label: "xAI"', js)
+        self.assertIn("/x\\.ai/i", js)
+        self.assertIn("/grok/i", js)
+        self.assertIn("/confirmation code/i", js)
+        self.assertIn("[A-Z0-9]{3}[-\\s][A-Z0-9]{3}", js)
+        self.assertIn("normalizeVerificationCode", js)
+        self.assertIn("preserveSeparator", js)
+        self.assertIn('provider: provider.id', js)
+        self.assertIn('providerLabel: provider.label', js)
+
+    def test_provider_specific_verification_parsing_requires_provider_identity(self) -> None:
+        js = STATIC_JS.read_text(encoding="utf-8")
+
+        self.assertIn("identityPatterns", js)
+        self.assertIn("function providerMatchesText(provider, text)", js)
+        self.assertIn("provider.identityPatterns?.length && !providerMatchesText(provider, text)", js)
+        self.assertIn('identityPatterns: [/x\\.ai/i, /xai/i, /grok/i]', js)
+
     def test_fetch_and_retry_completion_resync_session_actions_after_busy_state_clears(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
 

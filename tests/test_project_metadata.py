@@ -41,8 +41,35 @@ class ProjectMetadataTests(unittest.TestCase):
         readme = self.read_root_file("README.md")
 
         self.assertRegex(readme, re.compile(r"当前版本：`\d+\.\d+\.\d+`"))
+        self.assertIn("[CHANGELOG.md](CHANGELOG.md)", readme)
         self.assertIn("git tag v", readme)
         self.assertIn("GHCR", readme)
+
+    def test_changelog_documents_current_version(self) -> None:
+        changelog = self.read_root_file("CHANGELOG.md")
+        version = getattr(mail_receiver, "__version__", "")
+
+        self.assertIn("# Changelog", changelog)
+        self.assertIn(f"## [{version}] - 2026-07-12", changelog)
+        self.assertIn("xAI/Grok", changelog)
+        self.assertIn("docs/api.md", changelog)
+
+    def test_api_documentation_covers_web_endpoints(self) -> None:
+        api_doc = self.read_root_file("docs/api.md")
+
+        self.assertIn("# API Reference", api_doc)
+        for endpoint in [
+            "GET /api/config",
+            "GET /api/accounts",
+            "POST /api/accounts",
+            "POST /api/check",
+            "POST /api/fetch",
+        ]:
+            with self.subTest(endpoint=endpoint):
+                self.assertIn(endpoint, api_doc)
+        self.assertIn("account_text", api_doc)
+        self.assertIn("include_raw", api_doc)
+        self.assertIn("错误响应", api_doc)
 
     def test_readme_has_concise_public_project_structure(self) -> None:
         readme = self.read_root_file("README.md")
