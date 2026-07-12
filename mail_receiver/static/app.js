@@ -24,7 +24,7 @@ const el = {
   appVersionBadge: document.getElementById("appVersionBadge"),
   themeToggle: document.getElementById("themeToggle"),
   fetchBtn: document.getElementById("fetchBtn"),
-  copyCurrentCodeBtn: document.getElementById("copyCurrentCodeBtn"),
+  currentCodeSummary: document.getElementById("currentCodeSummary"),
   accountTextInput: document.getElementById("accountTextInput"),
   privacyToggle: document.getElementById("privacyToggle"),
   inputQuality: document.getElementById("inputQuality"),
@@ -157,18 +157,6 @@ function formatTimingBreakdown(timings = {}) {
     return "阶段未知";
   }
   return entries.map((entry) => `${entry.label} ${formatElapsedTime(entry.elapsed_ms)}`).join(" / ");
-}
-
-function slowestTimingLabel(timings = {}) {
-  const entries = timingEntries(timings);
-  if (!entries.length) {
-    return "阶段未知";
-  }
-  const slowest = entries.reduce(
-    (currentSlowest, entry) => entry.elapsed_ms > currentSlowest.elapsed_ms ? entry : currentSlowest,
-    entries[0],
-  );
-  return `${slowest.label} ${formatElapsedTime(slowest.elapsed_ms)}`;
 }
 
 function senderDisplayName(value) {
@@ -421,8 +409,7 @@ function failureAccessibilityLabel(status) {
     return accountStatusLabel(status);
   }
   const insight = failureInsight(status.error, status.stage);
-  const diagnostic = accountDiagnosticText(status);
-  return `失败，${statusStageLabel(status.stage)}，耗时 ${formatElapsedTime(status.elapsed_ms)}，${insight.title}，${insight.summary}${diagnostic ? `，${diagnostic}` : ""}`;
+  return `失败，${statusStageLabel(status.stage)}，耗时 ${formatElapsedTime(status.elapsed_ms)}，${insight.title}，${insight.summary}`;
 }
 
 function compactStatusText(text, tone = "ready") {
@@ -514,10 +501,10 @@ function renderInputQuality() {
   }
   const tone = report.totalLines === 0 ? "idle" : report.invalidLines ? "warn" : "good";
   const hint = report.totalLines === 0
-    ? "粘贴后会即时检查行数与基础格式，不展示敏感字段。"
+    ? "粘贴后会自动读取账号。"
     : report.invalidLines
       ? `${report.invalidLines} 行格式需要检查`
-      : "格式看起来完整，将自动解析账号。";
+      : "格式完整后会自动读取账号。";
   el.inputQuality.innerHTML = `
     <div class="quality-meter" aria-hidden="true">
       <span style="width: ${escapeHtml(report.quality)}%"></span>
@@ -678,22 +665,22 @@ function scopeDescription() {
   if (!state.accounts.length) {
     return {
       label: "会话模式",
-      full: `先粘贴账号；解析完成后默认只拉取选中账号，避免一次拉取全部账号。${rawCopy}`,
+      full: `先粘贴账号；解析完成后默认使用当前账号，避免一次拉取全部账号。${rawCopy}`,
       compact: `先解析账号 · 默认单号 · ${rawCompact}`,
     };
   }
   if (state.fetchScope === "all") {
     const possibleTotal = state.accounts.length * limit;
     return {
-      label: "全部账号",
-      full: `将拉取全部 ${state.accounts.length} 个账号；每账号最多 ${limit} 封，预计最多 ${possibleTotal} 封。${rawCopy}`,
+      label: "当前范围",
+      full: `全部 ${state.accounts.length} 个账号；每账号最多 ${limit} 封，预计最多 ${possibleTotal} 封。${rawCopy}`,
       compact: `全部 ${state.accounts.length} 号 · 最多 ${possibleTotal} 封 · ${rawCompact}`,
     };
   }
   const selected = ensureSelectedAccount();
   return {
-    label: "选中账号",
-    full: `只拉取 ${selected}；每账号最多 ${limit} 封。${rawCopy}`,
+    label: "当前范围",
+    full: `当前账号 ${selected}；每账号最多 ${limit} 封。${rawCopy}`,
     compact: `${selected || "未选择"} · 最多 ${limit} 封 · ${rawCompact}`,
   };
 }
@@ -741,6 +728,7 @@ function selectAccount(email) {
   renderResults(visibleMessages());
   selectInitialMessage(visibleMessages());
   syncFetchScopeControls();
+  setStatus("已选择账号", "ready");
 }
 
 function actionPayload(accountEmail = selectedFetchAccountEmail()) {
@@ -764,6 +752,8 @@ function syncLogActions() {
   el.clearLogBtn.disabled = !hasLogs;
   el.clearLogBtn.setAttribute("aria-disabled", String(!hasLogs));
   el.clearLogBtn.title = hasLogs ? "清空当前运行记录" : "暂无运行记录";
+  el.logDrawerToggle.classList.toggle("has-log-events", hasLogs);
+  el.logDrawerToggle.setAttribute("aria-label", hasLogs ? `查看运行日志，${el.runLog.children.length} 条记录` : "查看运行日志");
 }
 
 function focusRunLog() {
@@ -868,15 +858,38 @@ async function copyFailureSummary() {
   }
 }
 
-function syncSessionActions() {
-  const currentMail = selectedMail();
-  const currentCode = currentMail ? extractVerificationCode(currentMail).code : "";
-
-  if (el.copyCurrentCodeBtn) {
-    el.copyCurrentCodeBtn.disabled = !currentCode;
-    el.copyCurrentCodeBtn.setAttribute("aria-disabled", String(!currentCode));
-    el.copyCurrentCodeBtn.title = currentCode ? `复制当前验证码 ${currentCode}` : "当前邮件未识别验证码";
+function renderOperationCodeSummary(currentMail) {
+  if (!el.currentCodeSummary) {
+    return;
   }
+  const verification = currentMail ? extractVerificationCode(currentMail) : { code: "", source: "等待邮件", confidence: "none" };
+  const currentCode = verification.code;
+  const hasCode = Boolean(currentCode);
+  const title = currentCode || (currentMail ? "未识别验证码" : "等待邮件");
+  const detail = currentMail
+    ? `${verification.source} · ${confidenceLabel(verification.confidence)}`
+    : "拉取后随选中邮件更新";
+
+  el.currentCodeSummary.className = "operation-code-summary operation-verification-card verification-card";
+  el.currentCodeSummary.classList.toggle("has-code", hasCode);
+  el.currentCodeSummary.classList.toggle("is-empty", !currentMail);
+  el.currentCodeSummary.title = currentCode ? `验证码摘要 ${currentCode}` : title;
+  el.currentCodeSummary.setAttribute("aria-label", currentCode ? `验证码摘要：${currentCode}，${detail}` : `验证码摘要：${title}，${detail}`);
+  el.currentCodeSummary.innerHTML = `
+    <div class="verification-card-copy">
+      <span class="verification-eyebrow">验证码摘要</span>
+      <strong class="verification-code-value" title="${currentCode ? escapeHtml(currentCode) : escapeHtml(title)}">${escapeHtml(title)}</strong>
+      <span class="verification-source">${escapeHtml(detail)}</span>
+    </div>
+    <button type="button" class="button secondary copy-current-code-inline" data-code-action="copy-current" ${hasCode ? "" : "disabled aria-disabled=\"true\""}>
+      复制验证码
+    </button>
+  `;
+  el.currentCodeSummary.querySelector("[data-code-action=\"copy-current\"]")?.addEventListener("click", copyCurrentVerificationCode);
+}
+
+function syncSessionActions() {
+  renderOperationCodeSummary(selectedMail());
 }
 
 async function copyCurrentVerificationCode() {
@@ -936,7 +949,7 @@ function toggleLogDrawer() {
   panel?.classList.toggle("is-collapsed", !nextOpen);
   el.logDrawerToggle?.setAttribute("aria-expanded", String(nextOpen));
   if (el.logDrawerToggle) {
-    el.logDrawerToggle.textContent = nextOpen ? "收起日志" : "展开日志";
+    el.logDrawerToggle.textContent = nextOpen ? "收起" : "日志";
   }
 }
 
@@ -950,14 +963,9 @@ function mailListEmptyMarkup() {
       <div class="mail-empty-copy">
         ${mailEmptyIconMarkup()}
         <div>
-          <strong>等待本次拉取</strong>
-          <span>拉取成功后会在这里显示最近邮件，并自动选中第一封。</span>
+          <strong>等待邮件</strong>
+          <span>拉取后显示邮件与验证码。</span>
         </div>
-      </div>
-      <div class="mail-empty-guide" aria-hidden="true">
-        <span class="mail-empty-step"><i></i>账号解析</span>
-        <span class="mail-empty-step"><i></i>IMAP 拉取</span>
-        <span class="mail-empty-step"><i></i>自动选中</span>
       </div>
       <div class="mail-empty-rows" aria-hidden="true">
         <div class="mail-empty-row is-preview-selected">
@@ -989,7 +997,7 @@ function mailListEmptyMarkup() {
   `;
 }
 
-function mailReaderPlaceholderMarkup(title = "选择邮件查看详情", description = "主题、来源、收件人和正文预览会在选中邮件后展开。") {
+function mailReaderPlaceholderMarkup(title = "邮件详情", description = "选中邮件后显示正文和验证码摘要。") {
   return `
     <div class="mail-detail-placeholder mail-empty-hero" aria-label="阅读区占位预览">
       ${mailEmptyIconMarkup()}
@@ -1240,30 +1248,6 @@ function statusStageLabel(stage) {
   return labels[stage] || "处理";
 }
 
-function accountDiagnosticText(status) {
-  if (!status) {
-    return "";
-  }
-  const rawBytes = Number(status.raw_bytes);
-  const parts = [];
-  if (Number.isFinite(rawBytes) && rawBytes > 0) {
-    parts.push(`下载 ${formatBytes(rawBytes)}`);
-  }
-  const timingCopy = slowestTimingLabel(status.timings);
-  if (timingCopy !== "阶段未知") {
-    parts.push(`慢点 ${slowestTimingLabel(status.timings)}`);
-  }
-  return parts.join(" · ");
-}
-
-function accountDiagnosticMarkup(status) {
-  const diagnostic = accountDiagnosticText(status);
-  if (!diagnostic) {
-    return "";
-  }
-  return `<div class="account-row-diagnostic" title="${escapeHtml(diagnostic)}" aria-hidden="true">${escapeHtml(diagnostic)}</div>`;
-}
-
 function statusPill(account) {
   const status = state.accountStatus.get(account.email);
   if (!status) {
@@ -1286,12 +1270,10 @@ function accountStatusLabel(status) {
     return "拉取中";
   }
   if (status.kind === "fetch") {
-    const diagnostic = accountDiagnosticText(status);
-    return `已拉取，${status.fetched} 封，耗时 ${formatElapsedTime(status.elapsed_ms)}${diagnostic ? `，${diagnostic}` : ""}`;
+    return `已拉取，${status.fetched} 封，耗时 ${formatElapsedTime(status.elapsed_ms)}`;
   }
-  const diagnostic = accountDiagnosticText(status);
   const insight = failureInsight(status.error, status.stage);
-  return `失败，${statusStageLabel(status.stage)}，耗时 ${formatElapsedTime(status.elapsed_ms)}${diagnostic ? `，${diagnostic}` : ""}，${insight.title}：${insight.summary}`;
+  return `失败，${statusStageLabel(status.stage)}，耗时 ${formatElapsedTime(status.elapsed_ms)}，${insight.title}：${insight.summary}`;
 }
 
 function accountFailureCount() {
@@ -1332,8 +1314,8 @@ function renderAccounts(accounts) {
     const report = inspectAccountText(el.accountTextInput?.value || "");
     if (report.totalLines) {
       const pendingHint = report.invalidLines
-        ? `${report.invalidLines} 行格式需要检查，修正后会自动解析。`
-        : "格式完整后会自动读取账号，并只展示邮箱状态。";
+        ? `${report.invalidLines} 行格式需要检查`
+        : "格式完整，准备读取账号状态。";
       el.accountList.innerHTML = `
         <div class="account-empty-panel account-pending-panel" aria-label="账号等待解析">
           <strong>${escapeHtml(report.totalLines)} 行等待解析</strong>
@@ -1349,11 +1331,11 @@ function renderAccounts(accounts) {
     }
     el.accountList.innerHTML = `
       <div class="account-empty-panel" aria-label="账号状态待命">
-        <strong>等待账号输入</strong>
-        <span>粘贴账号后会自动解析，并显示拉取状态。</span>
+        <strong>等待账号</strong>
+        <span>粘贴后自动读取账号状态。</span>
         <div class="account-empty-guide" aria-hidden="true">
-          <span class="account-empty-chip">只显示邮箱</span>
-          <span class="account-empty-chip">隐藏密钥</span>
+          <span class="account-empty-chip">自动读取</span>
+          <span class="account-empty-chip">隐私保护</span>
         </div>
       </div>
     `;
@@ -1370,8 +1352,10 @@ function renderAccounts(accounts) {
     row.title = status ? `${account.email}：${statusLabel}` : account.email;
     const copyButton = document.createElement("button");
     copyButton.type = "button";
-    copyButton.className = "copy-account-button";
-    copyButton.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-copy"></use></svg>';
+    copyButton.className = "copy-account-button account-copy-zone";
+    copyButton.innerHTML = `
+      <span class="copy-account-icon" aria-hidden="true"><svg class="icon"><use href="#icon-copy"></use></svg></span>
+    `;
     copyButton.title = `复制邮箱账号 ${account.email}`;
     copyButton.setAttribute("aria-label", `复制邮箱账号 ${account.email}`);
     copyButton.addEventListener("click", (event) => {
@@ -1380,15 +1364,13 @@ function renderAccounts(accounts) {
     });
     const selectButton = document.createElement("button");
     selectButton.type = "button";
-    selectButton.className = "account-select-button";
+    selectButton.className = "account-select-button account-status-button";
+    selectButton.title = `选择账号 ${account.email}`;
     selectButton.setAttribute("aria-label", `${account.email}，${isSelected ? "当前选中，" : ""}${failureAccessibilityLabel(status)}`);
     selectButton.setAttribute("aria-pressed", String(isSelected));
     selectButton.innerHTML = `
-      <div class="account-row-head">
-        <strong>${escapeHtml(account.email)}</strong>
-        ${statusPill(account)}
-      </div>
-      ${accountDiagnosticMarkup(status)}
+      <strong class="account-email-label">${escapeHtml(account.email)}</strong>
+      ${statusPill(account)}
     `;
     selectButton.addEventListener("click", () => selectAccount(account.email));
     row.append(copyButton, selectButton);
@@ -1832,7 +1814,6 @@ initTheme();
 
 el.themeToggle.addEventListener("click", toggleTheme);
 el.fetchBtn.addEventListener("click", fetchMail);
-el.copyCurrentCodeBtn?.addEventListener("click", copyCurrentVerificationCode);
 el.logDrawerToggle?.addEventListener("click", toggleLogDrawer);
 el.mailList.addEventListener("keydown", handleMailListKeydown);
 el.limitInput.addEventListener("change", () => {

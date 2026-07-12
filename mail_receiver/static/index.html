@@ -97,53 +97,74 @@
           </section>
 
           <section class="panel operation-panel">
-            <div class="section-title">
+            <div class="section-title operation-panel-title">
               <div>
                 <h2>控制台</h2>
               </div>
+              <div id="operationNote" class="operation-note" aria-live="polite">
+                <span>会话模式</span>
+                <strong>
+                  <span class="operation-note-full">即时预览，不写入本地库；刷新页面即清空本次结果。</span>
+                  <span class="operation-note-compact" aria-hidden="true">预览 · 不入库 · 刷新清空</span>
+                </strong>
+              </div>
             </div>
-            <div class="operation-grid">
-              <label class="field-label">
-                <span>邮箱目录</span>
-                <input id="mailboxInput" type="text" value="INBOX" />
-              </label>
-              <label class="field-label compact-field">
-                <span>每账号最多</span>
-                <input id="limitInput" type="number" min="0" max="100" value="1" />
-              </label>
+            <div class="operation-command-row">
+              <div class="operation-command-actions">
+                <div class="action-stack">
+                  <button id="fetchBtn" type="button" class="button primary">
+                    <span class="button-spinner" aria-hidden="true"></span>
+                    <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+                    <span>开始拉取邮件</span>
+                  </button>
+                </div>
+                <div class="session-action-bar" aria-label="验证码摘要">
+                  <div id="currentCodeSummary" class="operation-code-summary operation-verification-card verification-card is-empty" role="status" aria-live="polite" aria-label="验证码摘要">
+                    <div class="verification-card-copy">
+                      <span class="verification-eyebrow">验证码摘要</span>
+                      <strong class="verification-code-value">等待邮件</strong>
+                      <span class="verification-source">拉取后随选中邮件更新</span>
+                    </div>
+                    <button type="button" class="button secondary copy-current-code-inline" data-code-action="copy-current" disabled aria-disabled="true">
+                      复制验证码
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="scope-toggle-group" role="group" aria-label="拉取范围">
-              <button id="selectedScopeBtn" type="button" class="scope-toggle is-active" aria-pressed="true">
-                选中账号
-              </button>
-              <button id="allScopeBtn" type="button" class="scope-toggle" aria-pressed="false">
-                全部账号
-              </button>
-            </div>
-            <label class="raw-fetch-toggle" title="下载每封完整 RFC822 原文，可能明显变慢。" aria-label="下载每封完整 RFC822 原文，可能明显变慢。">
-              <input id="rawFetchToggle" type="checkbox" />
-              <span>
-                <strong>完整原文</strong>
-                <small>RFC822 · 较慢</small>
-              </span>
-            </label>
-            <div id="operationNote" class="operation-note" aria-live="polite">
-              <span>会话模式</span>
-              <strong>
-                <span class="operation-note-full">即时预览，不写入本地库；刷新页面即清空本次结果。</span>
-                <span class="operation-note-compact" aria-hidden="true">预览 · 不入库 · 刷新清空</span>
-              </strong>
-            </div>
-            <div class="action-stack">
-              <button id="fetchBtn" type="button" class="button primary">
-                <span class="button-spinner" aria-hidden="true"></span>
-                <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
-                <span>拉取邮件</span>
-              </button>
-            </div>
-            <div class="session-action-bar" aria-label="本次结果快捷操作">
-              <button id="copyCurrentCodeBtn" type="button" class="button secondary" disabled aria-disabled="true">复制当前验证码</button>
-            </div>
+            <details class="advanced-settings">
+              <summary>
+                <span>高级设置</span>
+                <small>范围 · 邮箱目录 · 数量 · 原文</small>
+              </summary>
+              <div class="advanced-settings-body">
+                <div class="scope-toggle-group" role="group" aria-label="拉取范围">
+                  <button id="selectedScopeBtn" type="button" class="scope-toggle is-active" aria-pressed="true">
+                    选中账号
+                  </button>
+                  <button id="allScopeBtn" type="button" class="scope-toggle" aria-pressed="false">
+                    全部账号
+                  </button>
+                </div>
+                <div class="operation-grid">
+                  <label class="field-label">
+                    <span>邮箱目录</span>
+                    <input id="mailboxInput" type="text" value="INBOX" />
+                  </label>
+                  <label class="field-label compact-field">
+                    <span>每账号最多</span>
+                    <input id="limitInput" type="number" min="0" max="100" value="1" />
+                  </label>
+                </div>
+                <label class="raw-fetch-toggle" title="下载每封完整 RFC822 原文，可能明显变慢。" aria-label="下载每封完整 RFC822 原文，可能明显变慢。">
+                  <input id="rawFetchToggle" type="checkbox" />
+                  <span>
+                    <strong>完整原文</strong>
+                    <small>RFC822 · 较慢</small>
+                  </span>
+                </label>
+              </div>
+            </details>
           </section>
 
         </div>
@@ -173,14 +194,9 @@
                     <div class="mail-empty-copy">
                       <span class="mail-empty-icon"><svg class="icon" aria-hidden="true"><use href="#icon-outlook"></use></svg></span>
                       <div>
-                        <strong>等待本次拉取</strong>
-                        <span>拉取成功后会在这里显示最近邮件，并自动选中第一封。</span>
+                        <strong>等待邮件</strong>
+                        <span>拉取后显示邮件与验证码。</span>
                       </div>
-                    </div>
-                    <div class="mail-empty-guide" aria-hidden="true">
-                      <span class="mail-empty-step"><i></i>账号解析</span>
-                      <span class="mail-empty-step"><i></i>IMAP 拉取</span>
-                      <span class="mail-empty-step"><i></i>自动选中</span>
                     </div>
                     <div class="mail-empty-rows" aria-hidden="true">
                       <div class="mail-empty-row is-preview-selected">
@@ -215,8 +231,8 @@
                 <article class="mail-detail" id="mailDetail">
                   <div class="mail-detail-placeholder mail-empty-hero" aria-label="阅读区占位预览">
                     <span class="mail-empty-icon"><svg class="icon" aria-hidden="true"><use href="#icon-outlook"></use></svg></span>
-                    <strong>选择邮件查看详情</strong>
-                    <span>主题、来源、收件人和正文预览会在选中邮件后展开。</span>
+                    <strong>邮件详情</strong>
+                    <span>选中邮件后显示正文和验证码摘要。</span>
                     <div class="placeholder-reader-frame" aria-hidden="true">
                       <div class="placeholder-meta-grid">
                         <span>当前会话预览</span>
@@ -233,7 +249,7 @@
         </div>
       </main>
 
-      <button id="logDrawerToggle" type="button" class="button ghost log-drawer-tab" aria-expanded="false" aria-controls="runLogPanel">展开日志</button>
+      <button id="logDrawerToggle" type="button" class="button ghost log-drawer-tab" aria-label="查看运行日志" aria-expanded="false" aria-controls="runLogPanel">日志</button>
 
       <section id="runLogPanel" class="panel run-log-panel log-drawer is-collapsed">
         <div class="section-title">

@@ -38,12 +38,26 @@ def css_rule(css: str, selector: str) -> str:
     return match.group("body")
 
 
+def nested_css_rule(css: str, selector: str) -> str:
+    pattern = rf"^\s*{re.escape(selector)} \{{\n(?P<body>.*?)\n\s*\}}"
+    match = re.search(pattern, css, re.DOTALL | re.MULTILINE)
+    if match is None:
+        raise AssertionError(f"css rule not found: {selector}")
+    return match.group("body")
+
+
 class StaticUiTests(unittest.TestCase):
     def test_frontend_branding_uses_short_product_name(self) -> None:
         html = STATIC_HTML.read_text(encoding="utf-8")
 
         self.assertIn("<title>Outlook 邮件</title>", html)
         self.assertIn("<h1>Outlook 邮件</h1>", html)
+        self.assertIn('<header class="app-header">', html)
+        self.assertIn('<div class="brand-lockup">', html)
+        self.assertLess(
+            html.index('<header class="app-header">'),
+            html.index('<main class="workspace dashboard-grid">'),
+        )
         self.assertNotIn("Outlook 邮件调试台", html)
 
     def test_frontend_branding_shows_runtime_version_badge(self) -> None:
@@ -102,15 +116,21 @@ class StaticUiTests(unittest.TestCase):
         review_panel = css_rule(base_css, ".review-column.mail-review-stage > .result-panel")
         drawer = css_rule(base_css, ".run-log-panel.log-drawer")
 
-        self.assertIn("grid-template-columns: 1fr", dashboard)
+        self.assertIn("grid-template-columns: minmax(360px, 420px) minmax(0, 1fr)", dashboard)
+        self.assertIn("grid-template-rows: minmax(0, 1fr) auto", dashboard)
+        self.assertIn("height: calc(100vh - 142px)", dashboard)
+        self.assertIn("align-items: stretch", dashboard)
         self.assertIn("gap: 12px", dashboard)
-        self.assertIn("grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr)", command)
-        self.assertNotIn("minmax(420px, 1.08fr) auto", command)
+        self.assertIn("display: contents", command)
+        self.assertNotIn("grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr)", command)
         self.assertIn("grid-template-rows: auto", command_empty)
         self.assertNotIn("minmax(174px", command_empty)
-        self.assertIn("align-content: start", command)
-        self.assertIn("grid-template-columns: minmax(320px, 380px) minmax(0, 1fr)", review)
-        self.assertIn("grid-column: 1 / -1", review_panel)
+        self.assertIn("grid-column: 2", review)
+        self.assertIn("grid-row: 1 / 3", review)
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", review)
+        self.assertIn("height: 100%", review)
+        self.assertIn("grid-column: 1", review_panel)
+        self.assertIn("height: 100%", review_panel)
         self.assertIn("position: fixed", drawer)
         self.assertIn("right: 14px", drawer)
         self.assertIn("width: min(420px, calc(100vw - 32px))", drawer)
@@ -118,13 +138,46 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn(".log-drawer-tab", css)
         self.assertIn(".run-log-panel.log-drawer.is-open", css)
 
+    def test_desktop_workspace_uses_left_account_rail_and_right_work_area(self) -> None:
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        base_css = css[: css.index("@media")]
+
+        dashboard = css_rule(base_css, ".dashboard-grid")
+        command = css_rule(base_css, ".control-column.command-center")
+        account = css_rule(base_css, ".account-input-panel")
+        operation = css_rule(base_css, ".operation-panel")
+        review = css_rule(base_css, ".review-column.mail-review-stage")
+        result = css_rule(base_css, ".review-column.mail-review-stage > .result-panel")
+        account_list = css_rule(base_css, ".account-list")
+
+        self.assertIn("grid-template-columns: minmax(360px, 420px) minmax(0, 1fr)", dashboard)
+        self.assertIn("grid-template-rows: minmax(0, 1fr) auto", dashboard)
+        self.assertIn("height: calc(100vh - 142px)", dashboard)
+        self.assertIn("display: contents", command)
+        self.assertIn("grid-column: 1", account)
+        self.assertIn("grid-row: 1", account)
+        self.assertIn("height: 100%", account)
+        self.assertIn("overflow: hidden", account)
+        self.assertIn("grid-column: 1", operation)
+        self.assertIn("grid-row: 2", operation)
+        self.assertIn("align-self: end", operation)
+        self.assertNotIn("align-self: stretch", operation)
+        self.assertIn("grid-column: 2", review)
+        self.assertIn("grid-row: 1 / 3", review)
+        self.assertIn("min-height: 0", result)
+        self.assertIn("height: 100%", result)
+        self.assertIn("max-height: none", account_list)
+        self.assertIn("overflow: auto", account_list)
+
     def test_verification_code_card_and_session_actions_are_frontend_only(self) -> None:
         html = STATIC_HTML.read_text(encoding="utf-8")
         js = STATIC_JS.read_text(encoding="utf-8")
         css = STATIC_CSS.read_text(encoding="utf-8")
 
-        self.assertIn('id="copyCurrentCodeBtn"', html)
-        self.assertIn('copyCurrentCodeBtn: document.getElementById("copyCurrentCodeBtn")', js)
+        self.assertIn('id="currentCodeSummary"', html)
+        self.assertIn('currentCodeSummary: document.getElementById("currentCodeSummary")', js)
+        self.assertNotIn('id="copyCurrentCodeBtn"', html)
+        self.assertNotIn('copyCurrentCodeBtn: document.getElementById("copyCurrentCodeBtn")', js)
         for removed_control_id in [
             "copyAllCodesBtn",
             "exportResultsBtn",
@@ -152,6 +205,11 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("未识别验证码", js)
         self.assertIn(".verification-card", css)
         self.assertIn(".verification-code-value", css)
+        verification_card = css_rule(css[: css.index("@media")], ".verification-card")
+        verification_button = css_rule(css[: css.index("@media")], ".verification-card .button")
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", verification_card)
+        self.assertNotIn("grid-template-columns: minmax(0, 1fr) auto", verification_card)
+        self.assertIn("justify-self: start", verification_button)
         self.assertNotIn(".verification-card[data-privacy=\"hidden\"]", css)
 
     def test_fetch_and_retry_completion_resync_session_actions_after_busy_state_clears(self) -> None:
@@ -194,6 +252,191 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn(".control-column.command-center", mobile_block)
         self.assertIn("grid-template-columns: 1fr", mobile_block)
         self.assertIn(".run-log-panel.log-drawer", mobile_block)
+
+    def test_p1_empty_states_are_quiet_and_non_repetitive(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        js = STATIC_JS.read_text(encoding="utf-8")
+        active_copy = f"{html}\n{js}"
+
+        for noisy_copy in [
+            "粘贴账号 → 拉取邮件 → 查看验证码",
+            "等待本次拉取",
+            "选择邮件查看详情",
+        ]:
+            self.assertNotIn(noisy_copy, active_copy)
+
+        html_empty_mail = html[html.index('class="mail-list empty"'):html.index('class="mail-reader-shell"')]
+        js_empty_mail = js[js.index("function mailListEmptyMarkup"):js.index("function mailReaderPlaceholderMarkup")]
+        for noisy_mail_step in ["账号解析", "IMAP 拉取", "自动选中"]:
+            self.assertNotIn(noisy_mail_step, html_empty_mail)
+            self.assertNotIn(noisy_mail_step, js_empty_mail)
+
+        self.assertIn("等待账号", js)
+        self.assertIn("粘贴后自动读取账号状态", js)
+        self.assertIn("拉取后显示邮件与验证码", html)
+        self.assertIn("邮件详情", html)
+        self.assertNotIn("mail-empty-guide", html)
+
+    def test_p1_log_drawer_entry_is_quiet_until_session_events_exist(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        js = STATIC_JS.read_text(encoding="utf-8")
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        base_css = css[: css.index("@media")]
+
+        self.assertIn('id="logDrawerToggle"', html)
+        self.assertIn('aria-label="查看运行日志"', html)
+        self.assertIn(">日志</button>", html)
+        self.assertNotIn(">展开日志</button>", html)
+        self.assertIn('el.logDrawerToggle.classList.toggle("has-log-events", hasLogs);', js)
+        self.assertIn('el.logDrawerToggle.textContent = nextOpen ? "收起" : "日志";', js)
+
+        tab = css_rule(base_css, "button.log-drawer-tab")
+        has_events_tab = css_rule(base_css, 'button.log-drawer-tab.has-log-events:not([aria-expanded="true"])')
+        self.assertIn("top: auto", tab)
+        self.assertIn("bottom: 18px", tab)
+        self.assertIn("width: auto", tab)
+        self.assertIn("min-height: 34px", tab)
+        self.assertIn("writing-mode: horizontal-tb", tab)
+        self.assertIn("opacity: 0.58", tab)
+        self.assertNotIn("min-height: 112px", tab)
+        self.assertNotIn("writing-mode: vertical-rl", tab)
+        self.assertIn("opacity: 0.88", has_events_tab)
+
+    def test_p1_operation_console_groups_context_and_actions(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        base_css = css[: css.index("@media")]
+        operation = section_html(html, "控制台")
+
+        self.assertIn('class="section-title operation-panel-title"', operation)
+        self.assertIn('class="operation-command-row"', html)
+        self.assertIn('class="operation-command-actions"', html)
+        self.assertNotIn('class="operation-command-copy"', operation)
+        self.assertLess(operation.index('class="section-title operation-panel-title"'), operation.index('id="operationNote"'))
+        self.assertLess(operation.index('id="operationNote"'), operation.index('class="operation-command-row"'))
+        self.assertLess(operation.index('class="operation-command-actions"'), operation.index('id="fetchBtn"'))
+        self.assertLess(operation.index('id="fetchBtn"'), operation.index('id="currentCodeSummary"'))
+        self.assertIn("验证码摘要", operation)
+        self.assertNotIn("复制当前验证码", operation)
+
+        title = css_rule(base_css, ".section-title.operation-panel-title")
+        title_note = css_rule(base_css, ".operation-panel-title .operation-note")
+        row = css_rule(base_css, ".operation-command-row")
+        actions = css_rule(base_css, ".operation-command-actions")
+        actions_stack = css_rule(base_css, ".operation-command-actions .action-stack")
+        code_summary = css_rule(base_css, ".operation-code-summary")
+        self.assertIn("display: grid", title)
+        self.assertIn("grid-template-columns: auto minmax(260px, 1fr)", title)
+        self.assertIn("justify-self: end", title_note)
+        self.assertIn("border-top: 0", title_note)
+        self.assertIn("grid-template-columns: 1fr", row)
+        self.assertIn("align-items: end", row)
+        self.assertIn("min-height: 58px", row)
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", actions)
+        self.assertIn("max-width: none", actions)
+        self.assertIn("justify-self: start", actions)
+        self.assertIn("grid-template-columns: 1fr", actions_stack)
+        self.assertIn("min-height: 48px", code_summary)
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", code_summary)
+
+    def test_p1_console_code_summary_tracks_selected_mail_with_inline_copy_button(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        js = STATIC_JS.read_text(encoding="utf-8")
+        css = STATIC_CSS.read_text(encoding="utf-8")
+
+        self.assertIn('id="currentCodeSummary"', html)
+        self.assertIn("验证码摘要", html)
+        self.assertIn("function renderOperationCodeSummary(currentMail)", js)
+        self.assertIn("const hasCode = Boolean(currentCode);", js)
+        self.assertIn('el.currentCodeSummary.className = "operation-code-summary operation-verification-card verification-card";', js)
+        self.assertIn('el.currentCodeSummary.classList.toggle("has-code", hasCode);', js)
+        self.assertIn('el.currentCodeSummary.classList.toggle("is-empty", !currentMail);', js)
+        self.assertIn("extractVerificationCode(currentMail)", js)
+        self.assertIn("copy-current-code-inline", js)
+        self.assertIn("copyCurrentVerificationCode", js)
+        self.assertIn(".operation-code-summary", css)
+        self.assertIn(".operation-code-summary.has-code", css)
+        self.assertIn(".operation-verification-card", css)
+        self.assertIn("复制验证码", html)
+
+    def test_console_code_summary_uses_full_verification_card_with_copy_button(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        js = STATIC_JS.read_text(encoding="utf-8")
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        base_css = css[: css.index("@media")]
+        operation = section_html(html, "控制台")
+
+        self.assertIn('id="currentCodeSummary"', operation)
+        self.assertIn("function renderOperationCodeSummary(currentMail)", js)
+        self.assertIn("operation-verification-card", js)
+        self.assertIn("verification-card-copy", js)
+        self.assertIn("verification-eyebrow", js)
+        self.assertIn("verification-code-value", js)
+        self.assertIn("verification-source", js)
+        self.assertIn("copy-current-code-inline", js)
+        self.assertIn('data-code-action="copy-current"', js)
+        self.assertIn("copyCurrentVerificationCode", js)
+        self.assertIn('el.currentCodeSummary.querySelector("[data-code-action=\\"copy-current\\"]")?.addEventListener("click", copyCurrentVerificationCode);', js)
+
+        card = css_rule(base_css, ".operation-verification-card")
+        code = css_rule(base_css, ".operation-verification-card .verification-code-value")
+        self.assertIn("min-height: 156px", card)
+        self.assertIn("padding: 16px 18px", card)
+        self.assertIn("border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--line-soft))", card)
+        self.assertIn("border-radius: var(--radius-lg)", card)
+        self.assertIn("justify-self: stretch", card)
+        self.assertIn("font-size: 32px", code)
+        self.assertIn("letter-spacing: 0.10em", code)
+
+    def test_console_verification_card_stays_inside_mobile_console(self) -> None:
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        narrow_start = css.index("@media (max-width: 720px)")
+        narrow_end = css.index("@media (min-width: 561px) and (max-width: 720px)", narrow_start)
+        phone_start = css.index("@media (max-width: 560px)")
+        phone_end = css.index("@media (max-width: 360px)", phone_start)
+        narrow_css = css[narrow_start:narrow_end]
+        phone_css = css[phone_start:phone_end]
+
+        actions = nested_css_rule(narrow_css, ".operation-command-actions")
+        card = nested_css_rule(phone_css, ".operation-verification-card")
+        code = nested_css_rule(phone_css, ".operation-verification-card .verification-code-value")
+        button = nested_css_rule(phone_css, ".operation-verification-card .copy-current-code-inline")
+
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", actions)
+        self.assertNotIn("minmax(360px", actions)
+        self.assertIn("width: 100%", card)
+        self.assertIn("min-height: 156px", card)
+        self.assertIn("padding: 16px 18px", card)
+        self.assertIn("font-size: 32px", code)
+        self.assertIn("width: auto", button)
+        self.assertIn("justify-self: start", button)
+
+    def test_account_management_sits_above_console_in_control_column(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        base_css = css[: css.index("@media")]
+        phone_start = css.index("@media (max-width: 560px)")
+        phone_end = css.index("@media (max-width: 360px)", phone_start)
+        phone_css = css[phone_start:phone_end]
+        control_column = column_html(html, "control-column")
+
+        operation = css_rule(base_css, ".operation-panel")
+        account = css_rule(base_css, ".account-input-panel")
+        review = css_rule(base_css, ".review-column.mail-review-stage")
+        mobile_operation = nested_css_rule(phone_css, ".operation-panel")
+        mobile_account = nested_css_rule(phone_css, ".account-input-panel")
+
+        self.assertLess(control_column.index("<h2>账号管理</h2>"), control_column.index("<h2>控制台</h2>"))
+        self.assertIn("grid-column: 1", operation)
+        self.assertIn("grid-row: 2", operation)
+        self.assertIn("align-self: end", operation)
+        self.assertNotIn("align-self: stretch", operation)
+        self.assertIn("grid-column: 1", account)
+        self.assertIn("grid-row: 1", account)
+        self.assertIn("grid-column: 2", review)
+        self.assertIn("grid-row: 1 / 3", review)
+        self.assertIn("order: 2", mobile_operation)
+        self.assertIn("order: 1", mobile_account)
 
     def test_scrollable_regions_use_quiet_edge_scrollbars(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
@@ -489,8 +732,8 @@ class StaticUiTests(unittest.TestCase):
         self.assertNotIn("radial-gradient(circle at 94% 16%", empty_summary)
 
         self.assertIn(".mail-result-summary", mobile_block)
-        self.assertIn("gap: 6px", mobile_block)
-        self.assertIn("padding: 10px 12px", mobile_block)
+        self.assertIn("gap: 4px", mobile_block)
+        self.assertIn("padding: 8px 10px", mobile_block)
         self.assertIn(".mail-summary-metrics", mobile_block)
         self.assertIn("gap: 8px", mobile_block)
 
@@ -658,6 +901,46 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn(".scope-toggle.is-active", css)
         self.assertIn(".account-row.is-selected", css)
 
+    def test_low_frequency_fetch_options_live_in_collapsed_advanced_settings(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        operation = section_html(html, "控制台")
+        base_css = css[: css.index("@media")]
+        mobile_start = css.index("@media (max-width: 560px)")
+        mobile_end = css.index("@media (prefers-reduced-motion: reduce)", mobile_start)
+        mobile_block = css[mobile_start:mobile_end]
+
+        details = re.search(r'<details class="advanced-settings">\s*(?P<body>.*?)\s*</details>', operation, re.DOTALL)
+        self.assertIsNotNone(details)
+        advanced_body = details.group("body")
+        primary_path = operation[:details.start()]
+
+        self.assertIn("<summary>", advanced_body)
+        self.assertIn("<span>高级设置</span>", advanced_body)
+        self.assertIn("<small>范围 · 邮箱目录 · 数量 · 原文</small>", advanced_body)
+        self.assertNotIn('<details class="advanced-settings" open', operation)
+
+        self.assertNotIn('class="scope-toggle-group"', primary_path)
+        self.assertNotIn('id="selectedScopeBtn"', primary_path)
+        self.assertNotIn('id="allScopeBtn"', primary_path)
+        self.assertIn('class="scope-toggle-group"', advanced_body)
+        self.assertIn('id="selectedScopeBtn"', advanced_body)
+        self.assertIn('id="allScopeBtn"', advanced_body)
+        self.assertIn('id="fetchBtn"', primary_path)
+        self.assertIn('id="currentCodeSummary"', primary_path)
+        self.assertIn("验证码摘要", primary_path)
+        self.assertNotIn("复制当前验证码", primary_path)
+        for low_frequency_id in ["mailboxInput", "limitInput", "rawFetchToggle", "selectedScopeBtn", "allScopeBtn"]:
+            self.assertNotIn(f'id="{low_frequency_id}"', primary_path)
+            self.assertIn(f'id="{low_frequency_id}"', advanced_body)
+
+        self.assertIn(".advanced-settings", base_css)
+        self.assertIn(".advanced-settings > summary", base_css)
+        self.assertIn(".advanced-settings .operation-grid", base_css)
+        self.assertIn(".advanced-settings .raw-fetch-toggle", base_css)
+        self.assertIn(".advanced-settings", mobile_block)
+        self.assertIn("min-height: 28px", mobile_block)
+
     def test_selected_account_row_reads_as_quiet_focus_not_alert_card(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
         base_css = css[: css.index("@media")]
@@ -720,23 +1003,23 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("${escapeHtml(formatElapsedTime(status.elapsed_ms))}", js)
         self.assertIn("耗时 ${formatElapsedTime(row.elapsed_ms)}", js)
 
-    def test_account_status_and_logs_surface_fetch_diagnostics(self) -> None:
+    def test_account_status_keeps_fetch_diagnostics_out_of_rows(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
         css = STATIC_CSS.read_text(encoding="utf-8")
 
         self.assertIn("function formatBytes", js)
         self.assertIn("function timingEntries", js)
         self.assertIn("function formatTimingBreakdown", js)
-        self.assertIn("function slowestTimingLabel", js)
-        self.assertIn("function accountDiagnosticMarkup", js)
         self.assertIn("raw_bytes: row.raw_bytes", js)
         self.assertIn("timings: row.timings || {}", js)
         self.assertIn("下载 ${formatBytes(row.raw_bytes)}", js)
         self.assertIn("阶段 ${formatTimingBreakdown(row.timings)}", js)
-        self.assertIn("慢点 ${slowestTimingLabel(status.timings)}", js)
-        self.assertIn("account-row-diagnostic", js)
-        self.assertIn(".account-row-diagnostic", css)
-        self.assertIn(".account-row.is-selected .account-row-diagnostic", css)
+        self.assertNotIn("慢点", js)
+        self.assertNotIn("function slowestTimingLabel", js)
+        self.assertNotIn("function accountDiagnosticText", js)
+        self.assertNotIn("function accountDiagnosticMarkup", js)
+        self.assertNotIn("account-row-diagnostic", js)
+        self.assertNotIn(".account-row-diagnostic", css)
 
         status_pill = js[js.index("function statusPill"):js.index("function accountStatusLabel")]
         self.assertIn('title="${escapeHtml(accountStatusLabel(status))}"', status_pill)
@@ -868,28 +1151,30 @@ class StaticUiTests(unittest.TestCase):
         js = STATIC_JS.read_text(encoding="utf-8")
         css = STATIC_CSS.read_text(encoding="utf-8")
 
-        for class_name in [
-            "mail-empty-guide",
-            "mail-empty-step",
+        for active_class_name in [
             "placeholder-reader-frame",
             "placeholder-meta-grid",
             "placeholder-line",
             "placeholder-line short",
             "is-preview-selected",
         ]:
-            self.assertIn(class_name, html)
-            self.assertIn(class_name, js)
+            self.assertIn(active_class_name, html)
+            self.assertIn(active_class_name, js)
 
-        self.assertIn("等待本次拉取", html)
-        self.assertIn("选择邮件查看详情", html)
+        for inactive_class_name in ["mail-empty-guide", "mail-empty-step"]:
+            self.assertNotIn(inactive_class_name, html)
+            self.assertNotIn(inactive_class_name, js)
+
+        self.assertIn("等待邮件", html)
+        self.assertIn("邮件详情", html)
+        self.assertNotIn("等待本次拉取", html)
+        self.assertNotIn("选择邮件查看详情", html)
         self.assertIn('aria-label="空邮件列表引导"', html)
         self.assertIn('aria-label="阅读区占位预览"', html)
         self.assertIn("当前会话预览", js)
         self.assertIn("关键头信息", js)
 
         for selector in [
-            ".mail-empty-guide",
-            ".mail-empty-step",
             ".placeholder-reader-frame",
             ".placeholder-meta-grid",
             ".placeholder-line",
@@ -991,9 +1276,10 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("transparent 9.5rem", hero)
         self.assertNotIn("linear-gradient(180deg, rgba(8, 120, 216, 0.024)", hero)
 
-        self.assertIn("min-height: clamp(228px, 30vh, 268px)", detail_placeholder)
+        self.assertIn("min-height: clamp(196px, 24vh, 232px)", detail_placeholder)
         self.assertIn("gap: 5px", detail_placeholder)
         self.assertIn("padding: 14px", detail_placeholder)
+        self.assertIn("opacity: 0.78", detail_placeholder)
         self.assertIn("width: 34px", detail_icon)
         self.assertIn("height: 34px", detail_icon)
         self.assertIn("color: var(--subtle)", detail_icon)
@@ -1003,6 +1289,7 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("gap: 8px", reader_frame)
         self.assertIn("padding: 10px", reader_frame)
         self.assertIn("color-mix(in srgb, var(--line-soft) 76%, transparent)", reader_frame)
+        self.assertIn("opacity: 0.64", reader_frame)
         self.assertIn("height: 7px", meta_line)
         self.assertIn("height: 6px", placeholder_line)
         self.assertIn("opacity: 0.52", placeholder_line)
@@ -1047,7 +1334,8 @@ class StaticUiTests(unittest.TestCase):
     def test_account_status_rows_do_not_expose_credentials(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
 
-        self.assertIn("account-row-head", js)
+        self.assertIn("account-email-label", js)
+        self.assertIn("copy-account-icon", js)
         self.assertNotIn("password ${escapeHtml(account.password)}", js)
         self.assertNotIn("client ${escapeHtml(account.client_id)}", js)
         self.assertNotIn("refresh ${escapeHtml(account.refresh_token)}", js)
@@ -1058,14 +1346,22 @@ class StaticUiTests(unittest.TestCase):
     def test_account_empty_state_is_guided_and_privacy_preserving(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
         css = STATIC_CSS.read_text(encoding="utf-8")
+        empty_start = js.index('aria-label="账号状态待命"')
+        empty_end = js.index("return;", empty_start)
+        account_empty_block = js[empty_start:empty_end]
 
         self.assertIn("account-empty-panel", js)
-        self.assertIn("等待账号输入", js)
-        self.assertIn("粘贴账号后会自动解析，并显示拉取状态。", js)
-        self.assertIn("account-empty-guide", js)
-        self.assertIn("account-empty-chip", js)
-        self.assertIn("只显示邮箱", js)
-        self.assertIn("隐藏密钥", js)
+        self.assertIn("等待账号", account_empty_block)
+        self.assertIn("粘贴后自动读取账号状态。", account_empty_block)
+        self.assertIn("account-empty-guide", account_empty_block)
+        self.assertIn("account-empty-chip", account_empty_block)
+        self.assertIn("自动读取", account_empty_block)
+        self.assertIn("隐私保护", account_empty_block)
+        self.assertNotIn("三步开始", js)
+        self.assertNotIn("粘贴账号 → 拉取邮件 → 查看验证码", js)
+        self.assertNotIn("查看验证码", account_empty_block)
+        self.assertNotIn("等待账号输入", js)
+        self.assertNotIn("粘贴账号后会自动解析，并显示拉取状态。", js)
         self.assertIn(".account-empty-panel", css)
         self.assertIn(".account-empty-guide", css)
         self.assertIn(".account-empty-chip", css)
@@ -1253,7 +1549,7 @@ class StaticUiTests(unittest.TestCase):
         self.assertNotIn("fetched=${row.fetched}", js)
         self.assertNotIn("unknown", js)
 
-    def test_account_rows_can_copy_email_without_changing_selection(self) -> None:
+    def test_account_rows_copy_only_from_icon_and_select_from_main_area(self) -> None:
         html = STATIC_HTML.read_text(encoding="utf-8")
         js = STATIC_JS.read_text(encoding="utf-8")
         css = STATIC_CSS.read_text(encoding="utf-8")
@@ -1261,17 +1557,21 @@ class StaticUiTests(unittest.TestCase):
 
         self.assertIn('<symbol id="icon-copy"', html)
         self.assertIn('className = `account-row ${isSelected ? "is-selected" : ""}`.trim()', js)
-        self.assertIn('className = "account-select-button"', js)
-        self.assertIn('className = "copy-account-button"', js)
-        self.assertIn('copyButton.innerHTML = \'<svg class="icon" aria-hidden="true"><use href="#icon-copy"></use></svg>\'', js)
+        self.assertIn('className = "account-select-button account-status-button"', js)
+        self.assertIn('className = "copy-account-button account-copy-zone"', js)
+        self.assertIn('class="copy-account-icon"', js)
+        self.assertIn('class="account-email-label"', js)
+        self.assertNotIn('class="account-copy-email"', js)
         self.assertNotIn('copyButton.textContent = "复制"', js)
         self.assertIn('copyButton.setAttribute("aria-label", `复制邮箱账号 ${account.email}`)', js)
         self.assertIn('copyButton.addEventListener("click", (event) => {', js)
         self.assertIn("event.stopPropagation()", js)
         self.assertIn("copyAccountEmail(account.email)", js)
+        self.assertIn('selectButton.addEventListener("click", () => selectAccount(account.email));', js)
         self.assertIn("navigator.clipboard.writeText(email)", js)
         self.assertIn('document.execCommand("copy")', js)
         self.assertIn('setStatus("已复制邮箱账号", "success")', js)
+        self.assertIn('setStatus("已选择账号", "ready")', js)
         self.assertIn("appendLog(`已复制 ${email}`", js)
         self.assertIn("row.append(copyButton, selectButton)", js)
         self.assertLess(js.index("row.append(copyButton, selectButton)"), js.index("el.accountList.append(row)"))
@@ -1279,21 +1579,41 @@ class StaticUiTests(unittest.TestCase):
 
         row = css_rule(base_css, ".account-row")
         select_button = css_rule(base_css, ".account-select-button")
+        status_button = css_rule(base_css, ".account-status-button")
         copy_button = css_rule(base_css, ".copy-account-button")
+        copy_icon_wrap = css_rule(base_css, ".copy-account-icon")
         copy_icon = css_rule(base_css, ".copy-account-button .icon")
         copy_hover = css_rule(base_css, ".copy-account-button:hover")
         copy_selected = css_rule(base_css, ".account-row.is-selected .copy-account-button")
+        account_email = css_rule(base_css, ".account-email-label")
         self.assertIn("grid-template-columns: auto minmax(0, 1fr)", row)
-        self.assertIn("min-width: 0", select_button)
+        self.assertIn("gap: 6px", row)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto", select_button)
+        self.assertIn("justify-self: stretch", select_button)
+        self.assertIn("text-align: left", select_button)
+        self.assertIn("min-height: 44px", status_button)
+        self.assertNotIn("border-left", status_button)
         self.assertIn("border: 0", copy_button)
         self.assertIn("background: transparent", copy_button)
+        self.assertIn("border-radius: calc(var(--radius-sm) - 3px)", copy_button)
         self.assertNotIn("border-radius: 999px", copy_button)
-        self.assertIn("min-width: 34px", copy_button)
+        self.assertIn("width: 44px", copy_button)
+        self.assertIn("min-width: 44px", copy_button)
+        self.assertIn("cursor: copy", copy_button)
+        self.assertIn("position: relative", copy_button)
+        self.assertNotIn("grid-template-columns: 48px minmax(0, 1fr)", copy_button)
+        self.assertIn("min-height: 44px", copy_button)
+        self.assertNotIn(".copy-account-button::after", base_css)
+        self.assertIn("width: 36px", copy_icon_wrap)
+        self.assertNotIn("padding-right", copy_icon_wrap)
+        self.assertNotIn("border-right", copy_icon_wrap)
         self.assertIn("width: 14px", copy_icon)
         self.assertIn("height: 14px", copy_icon)
-        self.assertIn("background: transparent", copy_hover)
-        self.assertNotIn("border-color", copy_hover)
-        self.assertIn("background: transparent", copy_selected)
+        self.assertIn("text-overflow: ellipsis", account_email)
+        self.assertIn("white-space: nowrap", account_email)
+        self.assertIn("background: color-mix(in srgb, var(--accent-softer) 54%, transparent)", copy_hover)
+        self.assertIn("color: var(--text-strong)", copy_hover)
+        self.assertIn("color: color-mix(in srgb, var(--accent) 72%, var(--text))", copy_selected)
         self.assertNotIn("border-color", copy_selected)
 
     def test_activity_events_are_structured_product_timeline_not_log_lines(self) -> None:
@@ -1834,8 +2154,8 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn('selectButton.setAttribute("aria-label", `${account.email}，${isSelected ? "当前选中，" : ""}${failureAccessibilityLabel(status)}`);', js)
         self.assertNotIn('status.error ? `，${status.error}` : ""', js)
         self.assertIn(".copy-account-button", css)
-        self.assertIn("min-width: 40px", css)
-        self.assertIn("min-height: 40px", css)
+        self.assertIn("min-height: 44px", css)
+        self.assertIn("cursor: copy", css)
 
     def test_fetch_failure_uses_compact_list_error_and_detailed_reader_error(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
@@ -2027,9 +2347,9 @@ class StaticUiTests(unittest.TestCase):
 
         self.assertIn("overflow: hidden", primary)
         self.assertIn("isolation: isolate", primary)
-        self.assertIn("border-color: color-mix(in srgb, #111827 88%, var(--line-strong))", primary)
-        self.assertIn("background: linear-gradient(180deg, #1f2937 0%, #0b1120 100%)", primary)
-        self.assertIn("box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14)", primary)
+        self.assertIn("border-color: color-mix(in srgb, var(--accent) 52%, var(--accent-strong))", primary)
+        self.assertIn("background: var(--accent-gradient)", primary)
+        self.assertIn("box-shadow: 0 12px 28px rgba(8, 120, 216, 0.24)", primary)
         self.assertNotIn("0 10px 20px rgba(15, 23, 42, 0.18)", primary)
 
         self.assertIn('content: ""', primary_after)
@@ -2039,10 +2359,10 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), transparent 48%)", primary_after)
 
         self.assertIn("transform: translateY(-1px)", primary_hover)
-        self.assertIn("box-shadow: 0 9px 20px rgba(15, 23, 42, 0.16)", primary_hover)
+        self.assertIn("box-shadow: 0 14px 30px rgba(8, 120, 216, 0.28)", primary_hover)
         self.assertNotIn("0 12px 24px rgba(15, 23, 42, 0.22)", primary_hover)
         self.assertIn("transform: translateY(0)", primary_active)
-        self.assertIn("box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12)", primary_active)
+        self.assertIn("box-shadow: 0 7px 16px rgba(8, 120, 216, 0.20)", primary_active)
 
         self.assertIn("filter: saturate(0.86)", primary_disabled)
         self.assertIn("color: color-mix(in srgb, var(--muted) 82%, transparent)", primary_disabled)
@@ -2050,13 +2370,15 @@ class StaticUiTests(unittest.TestCase):
 
         self.assertIn("cursor: progress", primary_busy)
         self.assertIn("transform: none", primary_busy)
-        self.assertIn("box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12)", primary_busy)
-        self.assertIn("background: linear-gradient(180deg, #1d2737 0%, #0b1120 100%)", primary_busy)
+        self.assertIn("box-shadow: 0 8px 18px rgba(8, 120, 216, 0.18)", primary_busy)
+        self.assertIn("background: var(--accent-gradient)", primary_busy)
         self.assertIn("opacity: 0.88", busy_spinner)
         self.assertIn("border-color: color-mix(in srgb, currentColor 62%, transparent)", busy_spinner)
         self.assertIn("border-right-color: transparent", busy_spinner)
 
-        self.assertIn("box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12)", operation_primary)
+        self.assertIn("min-height: 48px", operation_primary)
+        self.assertIn("font-size: 14.5px", operation_primary)
+        self.assertIn("box-shadow: 0 16px 32px rgba(8, 120, 216, 0.28)", operation_primary)
 
     def test_account_input_has_live_quality_feedback_without_exposing_secrets(self) -> None:
         html = STATIC_HTML.read_text(encoding="utf-8")
@@ -2626,10 +2948,9 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("border-top: 1px solid color-mix(in srgb, var(--line-soft) 64%, transparent)", note)
         self.assertIn("font-size: 10.25px", note)
 
-        self.assertIn("border-color: color-mix(in srgb, #111827 88%, var(--line-strong))", primary_button)
-        self.assertIn("background: linear-gradient(180deg, #1f2937 0%, #0b1120 100%)", primary_button)
-        self.assertIn("box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14)", primary_button)
-        self.assertNotIn("var(--accent", primary_button)
+        self.assertIn("border-color: color-mix(in srgb, var(--accent) 52%, var(--accent-strong))", primary_button)
+        self.assertIn("background: var(--accent-gradient)", primary_button)
+        self.assertIn("box-shadow: 0 12px 28px rgba(8, 120, 216, 0.24)", primary_button)
 
     def test_operation_console_reads_as_quiet_control_toolbar(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
@@ -2659,7 +2980,7 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("border-top: 1px solid color-mix(in srgb, var(--line-soft) 64%, transparent)", note)
         self.assertIn("font-size: 10.25px", note)
         self.assertIn("min-height: 38px", panel_button)
-        self.assertIn("box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12)", panel_primary)
+        self.assertIn("box-shadow: 0 16px 32px rgba(8, 120, 216, 0.28)", panel_primary)
 
     def test_operation_secondary_options_read_as_quiet_footer_rail(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
@@ -3191,21 +3512,28 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("gap: 10px", media_block)
         self.assertNotIn("min-height: 142px", media_block)
 
-    def test_desktop_control_column_keeps_run_log_visible_without_crowding(self) -> None:
+    def test_desktop_control_column_keeps_log_drawer_while_account_rail_scrolls(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
         base_css = css[: css.index("@media")]
         command = css_rule(base_css, ".control-column.command-center")
         drawer = css_rule(base_css, ".run-log-panel.log-drawer")
+        dashboard = css_rule(base_css, ".dashboard-grid")
+        account = css_rule(base_css, ".account-input-panel")
+        result = css_rule(base_css, ".review-column.mail-review-stage > .result-panel")
 
         self.assertIn(".control-column", css)
-        self.assertIn("height: auto", command)
-        self.assertIn("grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr)", command)
+        self.assertIn("display: contents", command)
+        self.assertIn("grid-template-columns: minmax(360px, 420px) minmax(0, 1fr)", dashboard)
         self.assertIn("position: fixed", drawer)
         self.assertIn("right: 14px", drawer)
         self.assertIn("min-height: 0", drawer)
         self.assertIn(".account-input-panel", css)
         self.assertIn("gap: 6px", css)
         self.assertIn("grid-template-rows: auto minmax(96px, auto) auto auto minmax(0, 1fr)", css)
+        self.assertIn("grid-column: 1", account)
+        self.assertIn("grid-row: 1", account)
+        self.assertIn("overflow: hidden", account)
+        self.assertIn("height: 100%", result)
         self.assertIn("min-height: 78px", css)
         self.assertIn("max-height: 116px", css)
         self.assertIn("max-height: none", css)
@@ -3289,8 +3617,9 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("margin: 14px auto 0", media_block)
         self.assertIn(".dashboard-grid", media_block)
         self.assertIn("gap: 12px", media_block)
-        self.assertIn(".result-panel", media_block)
         self.assertIn("height: calc(100vh - 126px)", media_block)
+        self.assertIn(".result-panel", media_block)
+        self.assertIn("height: 100%", media_block)
         self.assertIn(".control-column.is-account-compact", media_block)
         self.assertIn("grid-template-rows: auto auto minmax(174px, auto)", media_block)
         self.assertIn(".account-input-panel.is-account-compact", media_block)
@@ -3446,8 +3775,8 @@ class StaticUiTests(unittest.TestCase):
         css = STATIC_CSS.read_text(encoding="utf-8")
 
         self.assertIn("grid-template-columns: 1fr", css)
-        self.assertIn("grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr)", css)
-        self.assertNotIn("grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr) auto", css)
+        self.assertIn("grid-template-columns: minmax(360px, 420px) minmax(0, 1fr)", css)
+        self.assertNotIn("grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr)", css)
         self.assertIn("grid-template-columns: clamp(390px, 42%, 520px) minmax(0, 1fr)", css)
         self.assertIn("grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(116px, 0.55fr))", css)
         self.assertIn("@media (max-width: 980px)", css)
@@ -3669,9 +3998,42 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn(".account-input-panel .field-label", media_block)
         self.assertIn("gap: 5px", media_block)
         self.assertIn(".account-input-panel textarea", media_block)
-        self.assertIn("min-height: 104px", media_block)
-        self.assertIn("max-height: 132px", media_block)
+        self.assertIn("min-height: 76px", media_block)
+        self.assertIn("max-height: 96px", media_block)
         self.assertNotIn("textarea {\n    min-height: 142px;", media_block)
+
+    def test_mobile_first_viewport_surfaces_mail_result_header_and_summary(self) -> None:
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        media_start = css.index("@media (max-width: 560px)")
+        media_end = css.index("@media (prefers-reduced-motion: reduce)", media_start)
+        media_block = css[media_start:media_end]
+
+        account_list = re.search(r"\.account-list \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
+        operation_panel = re.search(r"\.operation-panel \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
+        result_panel = re.search(r"\.result-panel \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
+        operation_note = re.search(r"\.operation-note \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
+        advanced_summary = re.search(r"\.advanced-settings > summary \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
+        mail_summary = re.search(r"\.mail-result-summary \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
+
+        self.assertIsNotNone(account_list)
+        self.assertIsNotNone(operation_panel)
+        self.assertIsNotNone(result_panel)
+        self.assertIsNotNone(operation_note)
+        self.assertIsNotNone(advanced_summary)
+        self.assertIsNotNone(mail_summary)
+
+        self.assertIn("max-height: 96px", account_list.group("body"))
+        self.assertIn("min-height: 52px", account_list.group("body"))
+        self.assertIn("gap: 6px", operation_panel.group("body"))
+        self.assertIn("padding: 8px 10px", operation_panel.group("body"))
+        self.assertIn("padding: 10px 12px", result_panel.group("body"))
+        self.assertIn("scroll-margin-top: 8px", result_panel.group("body"))
+        self.assertIn("display: none", operation_note.group("body"))
+        self.assertIn("min-height: 28px", advanced_summary.group("body"))
+        self.assertIn("padding: 4px 8px", advanced_summary.group("body"))
+        self.assertIn("gap: 4px", mail_summary.group("body"))
+        self.assertIn("padding: 8px 10px", mail_summary.group("body"))
+        self.assertNotIn("max-height: 132px", media_block)
 
     def test_mobile_page_space_prioritizes_results_before_log_details(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
@@ -3684,9 +4046,17 @@ class StaticUiTests(unittest.TestCase):
         dashboard_rule = dashboard_match.group("body")
         self.assertIn("display: flex", dashboard_rule)
         self.assertIn("flex-direction: column", dashboard_rule)
+        self.assertIn("align-items: stretch", dashboard_rule)
         self.assertIn(".control-column.command-center", media_block)
         self.assertIn(".operation-panel", media_block)
         self.assertIn("order: 2", media_block)
+        operation_panel_rule = re.search(
+            r"^\s*\.operation-panel \{\n(?P<body>.*?)\n\s*\}",
+            media_block,
+            re.DOTALL | re.MULTILINE,
+        )
+        self.assertIsNotNone(operation_panel_rule)
+        self.assertIn("width: 100%", operation_panel_rule.group("body"))
         self.assertIn(".review-column.mail-review-stage", media_block)
         self.assertIn("order: 3", media_block)
         log_drawer_rule = re.search(
@@ -3708,13 +4078,13 @@ class StaticUiTests(unittest.TestCase):
         )
         self.assertIsNotNone(mobile_action_bar_rule)
         self.assertIn("grid-template-columns: minmax(0, 1fr)", mobile_action_bar_rule.group("body"))
-        mobile_action_button_rule = re.search(
-            r"^\s*\.session-action-bar \.button \{\n(?P<body>.*?)\n\s*\}",
+        mobile_code_summary_rule = re.search(
+            r"^\s*\.operation-code-summary \{\n(?P<body>.*?)\n\s*\}",
             media_block,
             re.DOTALL | re.MULTILINE,
         )
-        self.assertIsNotNone(mobile_action_button_rule)
-        self.assertIn("white-space: normal", mobile_action_button_rule.group("body"))
+        self.assertIsNotNone(mobile_code_summary_rule)
+        self.assertIn("min-height: 44px", mobile_code_summary_rule.group("body"))
         self.assertIn(".mail-empty-panel.mail-list-empty-state", media_block)
         self.assertIn("min-height: 0", media_block)
 
@@ -3727,7 +4097,8 @@ class StaticUiTests(unittest.TestCase):
         self.assertNotIn(".account-format-guide", media_block)
         self.assertNotIn(".format-label", media_block)
         self.assertIn(".account-list", media_block)
-        self.assertIn("max-height: 132px", media_block)
+        self.assertIn("max-height: 96px", media_block)
+        self.assertIn("min-height: 52px", media_block)
         self.assertIn(".account-row", media_block)
         self.assertIn("padding: 7px 9px", media_block)
         self.assertIn(".account-row-head strong", media_block)
@@ -3760,18 +4131,11 @@ class StaticUiTests(unittest.TestCase):
             "    white-space: normal;",
             media_block,
         )
-        self.assertIn(".operation-note strong", media_block)
         self.assertIn("grid-template-columns: 1fr", media_block)
         self.assertIn("align-items: start", media_block)
-        self.assertIn(
-            ".operation-note strong {\n"
-            "    display: block;\n"
-            "    overflow: hidden;\n"
-            "    text-overflow: ellipsis;\n"
-            "    white-space: nowrap;",
-            media_block,
-        )
-        self.assertNotIn(".operation-note strong {\n    display: none", media_block)
+        note_block = re.search(r"\.operation-note \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
+        self.assertIsNotNone(note_block)
+        self.assertIn("display: none", note_block.group("body"))
         self.assertIn(".action-stack", media_block)
         self.assertIn("gap: 8px", media_block)
         self.assertNotIn("overflow-x: auto", media_block)
@@ -3797,23 +4161,49 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("flex: 0 0 auto", media_block)
         self.assertIn("white-space: nowrap", media_block)
 
+    def test_account_status_card_limits_copy_to_icon_and_uses_main_area_for_selection(self) -> None:
+        js = STATIC_JS.read_text(encoding="utf-8")
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        base_css = css[: css.index("@media")]
+        render_accounts = js[js.index("function renderAccounts"):js.index("function mergeFetchedMessagesByAccount")]
+        copy_block = render_accounts[render_accounts.index("const copyButton"):render_accounts.index("const selectButton")]
+
+        copy_inner = re.search(r"copyButton\.innerHTML = `(?P<body>.*?)`;", copy_block, re.DOTALL)
+        self.assertIsNotNone(copy_inner)
+        self.assertIn("copy-account-icon", copy_inner.group("body"))
+        self.assertNotIn("account.email", copy_inner.group("body"))
+        self.assertNotIn("account-copy-email", copy_inner.group("body"))
+
+        select_inner = re.search(r"selectButton\.innerHTML = `(?P<body>.*?)`;", render_accounts, re.DOTALL)
+        self.assertIsNotNone(select_inner)
+        self.assertIn('class="account-email-label"', select_inner.group("body"))
+        self.assertIn("${escapeHtml(account.email)}", select_inner.group("body"))
+        self.assertIn("${statusPill(account)}", select_inner.group("body"))
+        self.assertIn('selectButton.addEventListener("click", () => selectAccount(account.email));', render_accounts)
+        self.assertIn('setStatus("已选择账号", "ready");', js)
+
+        account_row = css_rule(base_css, ".account-row")
+        copy_button = css_rule(base_css, ".copy-account-button")
+        select_button = css_rule(base_css, ".account-select-button")
+        self.assertIn("grid-template-columns: auto minmax(0, 1fr)", account_row)
+        self.assertIn("width: 44px", copy_button)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto", select_button)
+        self.assertNotIn("grid-template-columns: 48px minmax(0, 1fr)", copy_button)
+        self.assertNotIn(".copy-account-button::after", base_css)
+
     def test_ultra_narrow_operation_note_keeps_session_scope_readable(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
         media_start = css.index("@media (max-width: 360px)")
         media_end = css.index("@media (prefers-reduced-motion: reduce)", media_start)
         media_block = css[media_start:media_end]
         note_block = re.search(r"\.operation-note \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
-        strong_block = re.search(r"\.operation-note strong \{\n(?P<body>.*?)\n  \}", media_block, re.DOTALL)
 
         self.assertIsNotNone(note_block)
-        self.assertIsNotNone(strong_block)
+        self.assertIn("display: none", note_block.group("body"))
         self.assertIn("align-items: center", note_block.group("body"))
         self.assertIn("min-height: 0", note_block.group("body"))
         self.assertIn("grid-template-columns: auto minmax(0, 1fr)", note_block.group("body"))
-        self.assertIn("line-height: 1.3", strong_block.group("body"))
-        self.assertIn("white-space: nowrap", strong_block.group("body"))
-        self.assertIn("text-overflow: ellipsis", strong_block.group("body"))
-        self.assertNotIn("-webkit-line-clamp: 2", strong_block.group("body"))
+        self.assertNotIn("-webkit-line-clamp: 2", note_block.group("body"))
 
     def test_mobile_mail_rows_keep_time_inline_for_client_like_scanning(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
@@ -3856,7 +4246,6 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("font-size: 11.5px", mail_preview.group("body"))
         self.assertIn("line-height: 1.28", mail_preview.group("body"))
         self.assertLessEqual((4 * 70) + (3 * 6), 304)
-        self.assertNotIn("min-height: 76px", media_block)
         self.assertNotIn("padding: 11px 11px 11px 13px", media_block)
 
     def test_mobile_selected_mail_row_uses_quiet_inline_marker_without_card_lift(self) -> None:
