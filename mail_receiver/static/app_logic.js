@@ -1,6 +1,49 @@
 (function (globalScope) {
   'use strict';
 
+  function createSessionCoordinator(controllerFactory) {
+    var revision = 0;
+    var controllers = new Set();
+    var makeController = controllerFactory || function () {
+      return new globalScope.AbortController();
+    };
+
+    function currentRevision() {
+      return revision;
+    }
+
+    function isCurrent(candidateRevision) {
+      return candidateRevision === revision;
+    }
+
+    function startRequest() {
+      var controller = makeController();
+      controllers.add(controller);
+      return { controller: controller, revision: revision };
+    }
+
+    function finishRequest(controller) {
+      controllers.delete(controller);
+    }
+
+    function reset() {
+      revision += 1;
+      controllers.forEach(function (controller) {
+        controller.abort();
+      });
+      controllers.clear();
+      return revision;
+    }
+
+    return {
+      currentRevision: currentRevision,
+      finishRequest: finishRequest,
+      isCurrent: isCurrent,
+      reset: reset,
+      startRequest: startRequest,
+    };
+  }
+
   function messageKey(message) {
     var safeMessage = message || {};
     var accountEmail = String(safeMessage.account_email ?? '').toLowerCase();
@@ -25,6 +68,7 @@
   }
 
   var api = {
+    createSessionCoordinator: createSessionCoordinator,
     messageKey: messageKey,
     findMessageByKey: findMessageByKey,
   };

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  createSessionCoordinator,
   messageKey,
   findMessageByKey,
 } = require('../mail_receiver/static/app_logic.js');
@@ -122,4 +123,59 @@ test('returns null when the message collection is absent', () => {
 
   assert.strictEqual(findMessageByKey(null, key), null);
   assert.strictEqual(findMessageByKey(undefined, key), null);
+});
+
+test('reset aborts active requests and advances the session revision', () => {
+  const controllers = [];
+  const coordinator = createSessionCoordinator(() => {
+    const controller = {
+      aborted: false,
+      signal: {},
+      abort() {
+        this.aborted = true;
+      },
+    };
+    controllers.push(controller);
+    return controller;
+  });
+
+  const first = coordinator.startRequest();
+  const second = coordinator.startRequest();
+
+  assert.equal(first.revision, 0);
+  assert.equal(second.revision, 0);
+  assert.equal(coordinator.currentRevision(), 0);
+  assert.equal(coordinator.isCurrent(first.revision), true);
+
+  assert.equal(coordinator.reset(), 1);
+  assert.equal(controllers[0].aborted, true);
+  assert.equal(controllers[1].aborted, true);
+  assert.equal(coordinator.isCurrent(first.revision), false);
+  assert.equal(coordinator.currentRevision(), 1);
+  assert.equal(coordinator.reset(), 2);
+  assert.equal(coordinator.currentRevision(), 2);
+});
+
+test('finished requests are not aborted by a later reset', () => {
+  const controllers = [];
+  const coordinator = createSessionCoordinator(() => {
+    const controller = {
+      aborted: false,
+      signal: {},
+      abort() {
+        this.aborted = true;
+      },
+    };
+    controllers.push(controller);
+    return controller;
+  });
+
+  const finished = coordinator.startRequest();
+  coordinator.finishRequest(finished.controller);
+  coordinator.reset();
+
+  assert.equal(controllers[0].aborted, false);
+  const current = coordinator.startRequest();
+  assert.equal(current.revision, 1);
+  assert.equal(coordinator.isCurrent(current.revision), true);
 });
