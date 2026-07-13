@@ -525,16 +525,27 @@ def _decode_text_payload(payload: bytes, charset: str | None) -> str:
         return payload.decode("utf-8", errors="replace")
 
 
+def _iter_inline_leaf_parts(message: Message) -> Iterable[Message]:
+    if not message.is_multipart():
+        yield message
+        return
+
+    payload = message.get_payload()
+    if not isinstance(payload, list):
+        return
+    for child in payload:
+        if not isinstance(child, Message):
+            continue
+        if child.get_content_disposition() == "attachment":
+            continue
+        yield from _iter_inline_leaf_parts(child)
+
+
 def extract_body_text(message: Message) -> str:
     if message.is_multipart():
         plain_parts: list[str] = []
         html_parts: list[str] = []
-        for part in message.walk():
-            if part.is_multipart():
-                continue
-            content_disposition = part.get_content_disposition()
-            if content_disposition == "attachment":
-                continue
+        for part in _iter_inline_leaf_parts(message):
             content_type = part.get_content_type()
             try:
                 content = part.get_content()
@@ -543,9 +554,13 @@ def extract_body_text(message: Message) -> str:
                 charset = part.get_content_charset()
                 content = _decode_text_payload(payload, charset)
             if content_type == "text/plain":
-                plain_parts.append(str(content))
+                plain_text = str(content)
+                if plain_text.strip():
+                    plain_parts.append(plain_text)
             elif content_type == "text/html":
-                html_parts.append(_html_to_text(str(content)))
+                html_text = _html_to_text(str(content))
+                if html_text:
+                    html_parts.append(html_text)
         return "\n".join(plain_parts or html_parts).strip()
 
     try:

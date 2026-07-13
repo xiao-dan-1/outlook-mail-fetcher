@@ -67,6 +67,46 @@ class ImapClientTests(unittest.TestCase):
 
         self.assertEqual(extract_body_text(message), "plain")
 
+    def test_extract_body_uses_html_when_plain_part_is_empty(self) -> None:
+        raw = (
+            b"Content-Type: multipart/alternative; boundary=x\r\n"
+            b"\r\n"
+            b"--x\r\n"
+            b"Content-Type: text/plain; charset=utf-8\r\n"
+            b"\r\n"
+            b"   \r\n"
+            b"--x\r\n"
+            b"Content-Type: text/html; charset=utf-8\r\n"
+            b"\r\n"
+            b"<p>HTML fallback body</p>\r\n"
+            b"--x--\r\n"
+        )
+        message = BytesParser(policy=policy.default).parsebytes(raw)
+
+        self.assertEqual(extract_body_text(message), "HTML fallback body")
+
+    def test_extract_body_excludes_attached_rfc822_contents(self) -> None:
+        raw = (
+            b"Content-Type: multipart/mixed; boundary=outer\r\n"
+            b"\r\n"
+            b"--outer\r\n"
+            b"Content-Type: text/plain; charset=utf-8\r\n"
+            b"\r\n"
+            b"Primary body\r\n"
+            b"--outer\r\n"
+            b"Content-Type: message/rfc822\r\n"
+            b'Content-Disposition: attachment; filename="forwarded.eml"\r\n'
+            b"\r\n"
+            b"From: sender@example.com\r\n"
+            b"Content-Type: text/plain; charset=utf-8\r\n"
+            b"\r\n"
+            b"ATTACHED SECRET\r\n"
+            b"--outer--\r\n"
+        )
+        message = BytesParser(policy=policy.default).parsebytes(raw)
+
+        self.assertEqual(extract_body_text(message), "Primary body")
+
     def test_extract_body_decodes_multipart_text_with_unknown_charset_as_utf8(self) -> None:
         raw = (
             b"Content-Type: multipart/alternative; boundary=x\r\n"
