@@ -1,4 +1,4 @@
-const { findMessageByKey, messageKey } = window.MailReceiverLogic;
+const { createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;
 
 const state = {
   config: null,
@@ -14,6 +14,8 @@ const state = {
   busy: false,
   accountPrivacy: true,
 };
+
+const sessionRequests = createSessionCoordinator();
 
 const THEME_STORAGE_KEY = "mailReceiverTheme";
 const AUTO_PARSE_DELAY_MS = 300;
@@ -445,6 +447,10 @@ async function api(path, options = {}) {
     throw new Error(data.error || `HTTP ${response.status}`);
   }
   return data;
+}
+
+function requestIsStale(revision, error) {
+  return !sessionRequests.isCurrent(revision) || error?.name === "AbortError";
 }
 
 function failureInsight(message, stage = "") {
@@ -1021,13 +1027,17 @@ async function copyCurrentVerificationCode() {
 }
 
 async function retryFailedAccounts() {
+  const operationRevision = sessionRequests.currentRevision();
   const failedEmails = state.failedRows.map((row) => row.email).filter(Boolean);
   if (!failedEmails.length) {
     setStatus("暂无失败账号", "ready");
     return;
   }
   try {
-    await ensureParsed();
+    const parsed = await ensureParsed();
+    if (!parsed || !sessionRequests.isCurrent(operationRevision)) {
+      return;
+    }
     setBusy(true, "正在重试失败账号");
     const summary = { fetched: 0, failed: 0 };
     for (const email of failedEmails) {
@@ -1039,17 +1049,25 @@ async function retryFailedAccounts() {
       renderAccounts(state.accounts);
       setStatus(`正在重试 ${email}`, "busy");
       const accountData = await fetchOneAccount(account);
+      if (!sessionRequests.isCurrent(operationRevision)) {
+        return;
+      }
       renderFetchResult(accountData);
       summary.fetched += accountData.fetched;
       summary.failed += accountData.failed;
     }
     setStatus(`重试完成：邮件 ${summary.fetched}，失败 ${summary.failed}`, summary.failed ? "warning" : "success");
   } catch (error) {
+    if (requestIsStale(operationRevision, error)) {
+      return;
+    }
     addLog(`重试失败：${error.message}`, "fail");
     setStatus("重试失败", "error");
   } finally {
-    setBusy(false);
-    syncSessionActions();
+    if (sessionRequests.isCurrent(operationRevision)) {
+      setBusy(false);
+      syncSessionActions();
+    }
   }
 }
 
@@ -1823,13 +1841,15 @@ async function parseInput(options = {}) {
   if (state.accounts.length && state.parsedText === accountText) {
     return true;
   }
+  const request = sessionRequests.startRequest();
   setBusy(true, source === "auto" ? "正在自动解析账号" : "正在读取账号");
   try {
     const data = await api("/api/accounts", {
       method: "POST",
       body: JSON.stringify(payloadBase()),
+      signal: request.controller.signal,
     });
-    if (accountText !== el.accountTextInput.value.trim()) {
+    if (!sessionRequests.isCurrent(request.revision) || accountText !== el.accountTextInput.value.trim()) {
       return false;
     }
     state.accountStatus.clear();
@@ -1840,11 +1860,17 @@ async function parseInput(options = {}) {
     setStatus(`已读取 ${data.count} 个账号`, "success");
     return true;
   } catch (error) {
+    if (requestIsStale(request.revision, error)) {
+      return false;
+    }
     addLog(error.message, "fail");
     setStatus("账号读取失败", "error");
     return false;
   } finally {
-    setBusy(false);
+    sessionRequests.finishRequest(request.controller);
+    if (sessionRequests.isCurrent(request.revision)) {
+      setBusy(false);
+    }
   }
 }
 
@@ -1857,15 +1883,25 @@ function accountsToFetch() {
 }
 
 async function fetchOneAccount(account) {
-  return api("/api/fetch", {
-    method: "POST",
-    body: JSON.stringify(actionPayload(account.email)),
-  });
+  const request = sessionRequests.startRequest();
+  try {
+    return await api("/api/fetch", {
+      method: "POST",
+      body: JSON.stringify(actionPayload(account.email)),
+      signal: request.controller.signal,
+    });
+  } finally {
+    sessionRequests.finishRequest(request.controller);
+  }
 }
 
 async function fetchMail() {
+  const operationRevision = sessionRequests.currentRevision();
   try {
-    await ensureParsed();
+    const parsed = await ensureParsed();
+    if (!parsed || !sessionRequests.isCurrent(operationRevision)) {
+      return;
+    }
     setBusy(true, "正在拉取邮件");
     renderMailLoadingState("正在拉取邮件");
     const summary = { fetched: 0, failed: 0 };
@@ -1874,12 +1910,18 @@ async function fetchMail() {
       renderAccounts(state.accounts);
       setStatus(`正在拉取 ${account.email}`, "busy");
       const accountData = await fetchOneAccount(account);
+      if (!sessionRequests.isCurrent(operationRevision)) {
+        return;
+      }
       renderFetchResult(accountData);
       summary.fetched += accountData.fetched;
       summary.failed += accountData.failed;
     }
     setStatus(`拉取完成：邮件 ${summary.fetched}，失败 ${summary.failed}`, summary.failed ? "warning" : "success");
   } catch (error) {
+    if (requestIsStale(operationRevision, error)) {
+      return;
+    }
     addLog(error.message, "fail");
     const results = visibleMessages();
     if (allSessionMessages().length) {
@@ -1891,20 +1933,24 @@ async function fetchMail() {
     }
     setStatus("拉取失败", "error");
   } finally {
-    setBusy(false);
-    syncSessionActions();
+    if (sessionRequests.isCurrent(operationRevision)) {
+      setBusy(false);
+      syncSessionActions();
+    }
   }
 }
 
 async function ensureParsed() {
   clearScheduledAccountParse();
   if (state.accounts.length && state.parsedText === el.accountTextInput.value.trim()) {
-    return;
+    return true;
   }
+  const revision = sessionRequests.currentRevision();
   const ok = await parseInput();
-  if (!ok) {
+  if (!ok && sessionRequests.isCurrent(revision)) {
     throw new Error("账号读取失败");
   }
+  return ok;
 }
 
 function showEmail(key, results = visibleMessages()) {
@@ -1945,6 +1991,7 @@ el.privacyToggle.addEventListener("click", () => {
   syncAccountPrivacy();
 });
 el.accountTextInput.addEventListener("input", () => {
+  sessionRequests.reset();
   clearScheduledAccountParse();
   state.accounts = [];
   state.accountStatus.clear();
@@ -1957,7 +2004,7 @@ el.accountTextInput.addEventListener("input", () => {
   renderInputQuality();
   resetAccountPrivacyWhenEmpty();
   syncAccountPrivacy();
-  syncActionAvailability();
+  setBusy(false);
   setStatus("准备就绪", "ready");
   scheduleAccountParse();
 });

@@ -253,6 +253,124 @@ class StaticUiTests(unittest.TestCase):
                 self.assertIn("syncSessionActions();", body)
                 self.assertLess(body.index("setBusy(false);"), body.index("syncSessionActions();"))
 
+    def test_account_edits_cancel_and_isolate_stale_requests(self) -> None:
+        js = STATIC_JS.read_text(encoding="utf-8")
+
+        def async_function_body(function_name: str) -> str:
+            function_match = re.search(
+                rf"async function {function_name}\([^)]*\) \{{(?P<body>.*?)\n\}}",
+                js,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(function_match, f"function not found: {function_name}")
+            return function_match.group("body")
+
+        self.assertIn(
+            "const { createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            js,
+        )
+        self.assertIn("const sessionRequests = createSessionCoordinator();", js)
+
+        stale_match = re.search(
+            r"function requestIsStale\(revision, error\) \{(?P<body>.*?)\n\}",
+            js,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(stale_match)
+        self.assertIn(
+            'return !sessionRequests.isCurrent(revision) || error?.name === "AbortError";',
+            stale_match.group("body"),
+        )
+
+        input_match = re.search(
+            r'el\.accountTextInput\.addEventListener\("input", \(\) => \{(?P<body>.*?)\n\}\);',
+            js,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(input_match)
+        input_body = input_match.group("body")
+        self.assertTrue(input_body.strip().startswith("sessionRequests.reset();"))
+        self.assertLess(input_body.index("sessionRequests.reset();"), input_body.index("resetSessionResults();"))
+        self.assertIn("setBusy(false);", input_body)
+
+        parse_body = async_function_body("parseInput")
+        for contract in [
+            "sessionRequests.startRequest()",
+            "request.controller.signal",
+            "sessionRequests.isCurrent(request.revision)",
+            "requestIsStale(request.revision, error)",
+            "sessionRequests.finishRequest(request.controller);",
+        ]:
+            with self.subTest(function_name="parseInput", contract=contract):
+                self.assertIn(contract, parse_body)
+        self.assertIn(
+            "catch (error) {\n"
+            "    if (requestIsStale(request.revision, error)) {\n"
+            "      return false;\n"
+            "    }",
+            parse_body,
+        )
+        self.assertIn(
+            "finally {\n"
+            "    sessionRequests.finishRequest(request.controller);\n"
+            "    if (sessionRequests.isCurrent(request.revision)) {\n"
+            "      setBusy(false);\n"
+            "    }\n"
+            "  }",
+            parse_body,
+        )
+
+        fetch_one_body = async_function_body("fetchOneAccount")
+        for contract in [
+            "sessionRequests.startRequest()",
+            "request.controller.signal",
+            "sessionRequests.finishRequest(request.controller);",
+        ]:
+            with self.subTest(function_name="fetchOneAccount", contract=contract):
+                self.assertIn(contract, fetch_one_body)
+        self.assertIn(
+            "finally {\n"
+            "    sessionRequests.finishRequest(request.controller);\n"
+            "  }",
+            fetch_one_body,
+        )
+
+        ensure_body = async_function_body("ensureParsed")
+        self.assertIn("sessionRequests.currentRevision()", ensure_body)
+        self.assertIn("!ok && sessionRequests.isCurrent(revision)", ensure_body)
+        self.assertIn("return ok;", ensure_body)
+
+        for function_name in ["fetchMail", "retryFailedAccounts"]:
+            with self.subTest(function_name=function_name):
+                body = async_function_body(function_name)
+                self.assertTrue(
+                    body.strip().startswith("const operationRevision = sessionRequests.currentRevision();")
+                )
+                self.assertIn("const operationRevision = sessionRequests.currentRevision();", body)
+                self.assertIn("const parsed = await ensureParsed();", body)
+                self.assertIn("!parsed || !sessionRequests.isCurrent(operationRevision)", body)
+                self.assertRegex(
+                    body,
+                    r"await fetchOneAccount\(account\);\s+if \(!sessionRequests\.isCurrent\(operationRevision\)\)",
+                )
+                self.assertIn("requestIsStale(operationRevision, error)", body)
+                self.assertIn(
+                    "catch (error) {\n"
+                    "    if (requestIsStale(operationRevision, error)) {\n"
+                    "      return;\n"
+                    "    }",
+                    body,
+                )
+                self.assertIn(
+                    "finally {\n"
+                    "    if (sessionRequests.isCurrent(operationRevision)) {\n"
+                    "      setBusy(false);\n"
+                    "      syncSessionActions();\n"
+                    "    }\n"
+                    "  }",
+                    body,
+                )
+
     def test_c2_mail_stage_defaults_to_selected_account_without_filter_chips(self) -> None:
         html = STATIC_HTML.read_text(encoding="utf-8")
         js = STATIC_JS.read_text(encoding="utf-8")
@@ -2725,7 +2843,7 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn(app_script, html)
         self.assertLess(html.index(logic_script), html.index(app_script))
         self.assertIn(
-            "const { findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertIn("selectedMessageKey: null", js)
