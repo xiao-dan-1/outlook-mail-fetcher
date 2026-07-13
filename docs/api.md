@@ -204,7 +204,7 @@ email----password----client_id----refresh_token
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `include_raw` | boolean | `true` 时返回完整 RFC822 原文到 `raw_message`，同时不限制预览下载大小 |
+| `include_raw` | boolean | `true` 时返回 `raw_message` 可读文本视图和 `raw_message_base64` 无损字节表示，同时不限制预览下载大小 |
 | `mock` | boolean | `true` 时使用本地模拟邮件，不连接 Outlook |
 
 ### Response
@@ -247,19 +247,25 @@ email----password----client_id----refresh_token
       "sender": "Security <security@example.com>",
       "recipients": "user@outlook.com",
       "sent_at": "2026-07-12T12:00:00+08:00",
-      "body_preview": "您的验证码是 123456"
+      "body_preview": "您的验证码是 123456",
+      "raw_message_complete": true
     }
   ]
 }
 ```
 
+`messages[]` 中的 `raw_message_complete` 始终存在。它表示本次 IMAP 拉取到的 `raw_message` 字节是否覆盖整封邮件；默认预览模式可能只下载前缀，因此该值可能为 `false`。
+
 当 `include_raw` 为 `true` 时，`messages[]` 中会额外包含：
 
 ```json
 {
-  "raw_message": "完整 RFC822 邮件原文"
+  "raw_message": "Subject: Raw\r\n\r\ncaf�",
+  "raw_message_base64": "U3ViamVjdDogUmF3DQoNCmNhZuk="
 }
 ```
+
+`raw_message` 是为兼容现有调用方保留的 UTF-8 可读文本视图。无法按 UTF-8 解码的原始字节会替换为 `U+FFFD`，因此该字段可能有损。`raw_message_base64` 是权威、无损的 RFC822 字节表示；调用方应对它进行 Base64 解码来恢复服务器实际返回的原始字节，并结合 `raw_message_complete` 判断这些字节是否覆盖整封邮件。
 
 ## curl examples
 

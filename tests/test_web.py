@@ -1,3 +1,4 @@
+import base64
 from pathlib import Path
 from contextlib import redirect_stdout
 from http.client import HTTPConnection
@@ -10,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from mail_receiver import web
-from mail_receiver.imap_client import AccountCheckResult
+from mail_receiver.imap_client import AccountCheckResult, EmailRecord
 from mail_receiver.web import (
     WebConfig,
     build_parser,
@@ -132,7 +133,9 @@ class WebServiceTests(unittest.TestCase):
             self.assertEqual(fetch_result["fetched"], 2)
             self.assertEqual(fetch_result["failed"], 0)
             self.assertEqual(len(fetch_result["messages"]), 2)
+            self.assertTrue(fetch_result["messages"][0]["raw_message_complete"])
             self.assertNotIn("raw_message", fetch_result["messages"][0])
+            self.assertNotIn("raw_message_base64", fetch_result["messages"][0])
             self.assertEqual(fetch_result["messages"][0]["uidvalidity"], "mock")
             self.assertFalse(db_path.exists())
 
@@ -148,9 +151,46 @@ class WebServiceTests(unittest.TestCase):
             fetch_result = fetch_data({"mock": True, "limit": 1, "include_raw": True}, config)
 
             self.assertEqual(fetch_result["fetched"], 1)
-            self.assertIn("raw_message", fetch_result["messages"][0])
-            self.assertIn("Subject: Welcome debug message 1", fetch_result["messages"][0]["raw_message"])
-            self.assertEqual(fetch_result["messages"][0]["uidvalidity"], "mock")
+            message = fetch_result["messages"][0]
+            self.assertTrue(message["raw_message_complete"])
+            self.assertIn("raw_message", message)
+            self.assertIn("Subject: Welcome debug message 1", message["raw_message"])
+            self.assertEqual(
+                base64.b64decode(message["raw_message_base64"]),
+                message["raw_message"].encode("utf-8"),
+            )
+            self.assertEqual(message["uidvalidity"], "mock")
+
+    def test_fetch_include_raw_preserves_non_utf8_bytes_as_base64(self) -> None:
+        raw_message = b"Subject: Raw\r\n\r\ncaf\xe9"
+        record = EmailRecord(
+            account_email="user@outlook.com",
+            mailbox="INBOX",
+            uid="123",
+            uidvalidity="456",
+            message_id="<raw@example.com>",
+            subject="Raw",
+            sender="sender@example.com",
+            recipients="user@outlook.com",
+            sent_at=None,
+            body_preview="caf�",
+            raw_message=raw_message,
+            raw_message_complete=True,
+        )
+
+        with patch("mail_receiver.web.fetch_messages", return_value=[record]):
+            fetch_result = fetch_data(
+                {
+                    "account_text": "user@outlook.com----secret----client----refresh-token",
+                    "include_raw": True,
+                },
+                WebConfig(),
+            )
+
+        message = fetch_result["messages"][0]
+        self.assertIn("caf�", message["raw_message"])
+        self.assertEqual(base64.b64decode(message["raw_message_base64"]), raw_message)
+        self.assertTrue(message["raw_message_complete"])
 
     def test_mock_fetch_preserves_zero_limit(self) -> None:
         with TemporaryDirectory() as directory:

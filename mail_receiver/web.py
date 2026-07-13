@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from dataclasses import dataclass
 import json
 import logging
@@ -297,9 +298,11 @@ def email_record_to_dict(record: Any, *, next_id: int, include_raw: bool = False
         "recipients": record.recipients,
         "sent_at": record.sent_at,
         "body_preview": record.body_preview,
+        "raw_message_complete": record.raw_message_complete,
     }
     if include_raw:
         data["raw_message"] = record.raw_message.decode("utf-8", errors="replace")
+        data["raw_message_base64"] = base64.b64encode(record.raw_message).decode("ascii")
     return data
 
 
