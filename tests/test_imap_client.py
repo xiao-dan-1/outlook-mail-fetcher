@@ -1,5 +1,6 @@
 from email import policy
 from email.parser import BytesParser
+import re
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -255,13 +256,22 @@ class InstrumentedIMAP:
             return self.fetch_status, [b""]
 
         selected = self._messages_for_set(message_set)
+        partial_match = re.search(r"BODY\.PEEK\[\]<0\.([0-9]+)>", message_parts)
         data: list[object] = []
         for sequence, uid, raw in selected:
             if sequence in self.malformed_sequences:
                 data.append((f"{sequence} (UID {uid})".encode("ascii"),))
                 continue
-            header = f"{sequence} (UID {uid} BODY[] {{{len(raw)}}}".encode("ascii")
-            data.append((header, raw))
+            if partial_match is not None:
+                literal = raw[: int(partial_match.group(1))]
+                header = (
+                    f"{sequence} (UID {uid} RFC822.SIZE {len(raw)} "
+                    f"BODY[]<0> {{{len(literal)}}}"
+                ).encode("ascii")
+            else:
+                literal = raw
+                header = f"{sequence} (UID {uid} BODY[] {{{len(raw)}}}".encode("ascii")
+            data.append((header, literal))
             data.append(b")")
         return "OK", data
 
@@ -441,6 +451,7 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
 
         client = InstrumentedIMAP.instances[0]
         self.assertEqual([record.uid for record in records], ["999", "1000"])
+        self.assertTrue(all(record.raw_message_complete for record in records))
         self.assertIn(("SELECT", "INBOX", True), client.commands)
         self.assertIn(("FETCH", "999:*", "(UID BODY.PEEK[])"), client.commands)
         self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "SEARCH")), 0)
@@ -458,9 +469,36 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
 
         client = InstrumentedIMAP.instances[0]
         self.assertEqual([record.uid for record in records], ["996", "997", "998", "999", "1000"])
-        self.assertIn(("FETCH", "996:*", "(UID BODY.PEEK[]<0.16384>)"), client.commands)
+        self.assertTrue(all(record.raw_message_complete for record in records))
+        self.assertIn(
+            ("FETCH", "996:*", "(UID RFC822.SIZE BODY.PEEK[]<0.16384>)"),
+            client.commands,
+        )
         self.assertNotIn(("FETCH", "996:*", "(UID BODY.PEEK[])"), client.commands)
         self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 1)
+
+    def test_fetch_messages_marks_partial_raw_messages_by_rfc822_size(self) -> None:
+        short_raw = _raw_message("short")
+        max_bytes = len(short_raw) + 8
+        long_raw = _raw_message("long") + (b"x" * max_bytes)
+        InstrumentedIMAP.reset(count=2)
+        InstrumentedIMAP.messages = [("1", short_raw), ("2", long_raw)]
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            records = fetch_messages(_account(), limit=2, max_bytes=max_bytes)
+
+        client = InstrumentedIMAP.instances[0]
+        self.assertEqual(records[0].raw_message, short_raw)
+        self.assertTrue(records[0].raw_message_complete)
+        self.assertEqual(records[1].raw_message, long_raw[:max_bytes])
+        self.assertFalse(records[1].raw_message_complete)
+        self.assertIn(
+            ("FETCH", "1:*", f"(UID RFC822.SIZE BODY.PEEK[]<0.{max_bytes}>)"),
+            client.commands,
+        )
 
     def test_fetch_messages_records_stage_timings_and_downloaded_bytes(self) -> None:
         InstrumentedIMAP.reset(count=3)

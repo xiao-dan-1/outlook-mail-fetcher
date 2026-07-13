@@ -24,6 +24,7 @@ DEFAULT_IMAP_PORT = 993
 DEFAULT_IMAP_TIMEOUT = 30
 FETCH_MESSAGE_PARTS = "(UID BODY.PEEK[])"
 FETCH_UID_RE = re.compile(rb"\bUID\s+([0-9]+)\b")
+RFC822_SIZE_RE = re.compile(rb"\bRFC822\.SIZE\s+([0-9]+)(?=\s|\))", re.IGNORECASE)
 UIDVALIDITY_RE = re.compile(rb"\bUIDVALIDITY\s+([0-9]+)\b", re.IGNORECASE)
 T = TypeVar("T")
 
@@ -45,6 +46,7 @@ class EmailRecord:
     sent_at: str | None
     body_preview: str
     raw_message: bytes
+    raw_message_complete: bool = True
 
 
 @dataclass(frozen=True)
@@ -197,7 +199,9 @@ def fetch_messages(
             ),
         )
         if options.diagnostics is not None:
-            options.diagnostics.raw_bytes = sum(len(raw_message) for _uid, raw_message in payloads)
+            options.diagnostics.raw_bytes = sum(
+                len(raw_message) for _uid, raw_message, _raw_message_complete in payloads
+            )
             options.diagnostics.message_count = len(payloads)
         return _timed_stage(
             options.diagnostics,
@@ -339,25 +343,26 @@ def _fetch_message_payloads_by_sequence(
     *,
     sequence_set: str,
     message_parts: str = FETCH_MESSAGE_PARTS,
-) -> list[tuple[str, bytes]]:
+) -> list[tuple[str, bytes, bool]]:
     status, data = _imap_operation(
         f"fetch messages {sequence_set}",
         lambda: client.fetch(sequence_set, message_parts),
     )
     if status != "OK":
         raise ImapReceiveError(f"failed to fetch messages {sequence_set}: {status}")
-    return list(_iter_fetch_messages(data))
+    is_partial = "BODY.PEEK[]<0." in message_parts.upper()
+    return list(_iter_fetch_messages(data, is_partial=is_partial))
 
 
 def _records_from_message_payloads(
-    payloads: Iterable[tuple[str, bytes]],
+    payloads: Iterable[tuple[str, bytes, bool]],
     *,
     account_email: str,
     mailbox: str,
     uidvalidity: str,
 ) -> list[EmailRecord]:
     records: list[EmailRecord] = []
-    for uid, raw_message in payloads:
+    for uid, raw_message, raw_message_complete in payloads:
         message = BytesParser(policy=policy.default).parsebytes(raw_message)
         records.append(
             email_record_from_message(
@@ -367,6 +372,7 @@ def _records_from_message_payloads(
                 uidvalidity=uidvalidity,
                 message=message,
                 raw_message=raw_message,
+                raw_message_complete=raw_message_complete,
             )
         )
     return records
@@ -402,7 +408,7 @@ def _message_fetch_parts(max_bytes: int | None) -> str:
     if max_bytes is None:
         return FETCH_MESSAGE_PARTS
     safe_max_bytes = max(1, int(max_bytes))
-    return f"(UID BODY.PEEK[]<0.{safe_max_bytes}>)"
+    return f"(UID RFC822.SIZE BODY.PEEK[]<0.{safe_max_bytes}>)"
 
 
 def _connect_imap(
@@ -458,14 +464,22 @@ def _imap_operation(description: str, operation: Callable[[], T]) -> T:
         raise ImapReceiveError(f"{description} failed: {exc}") from exc
 
 
-def _iter_fetch_messages(data: Iterable[object]) -> Iterable[tuple[str, bytes]]:
+def _iter_fetch_messages(
+    data: Iterable[object],
+    *,
+    is_partial: bool = False,
+) -> Iterable[tuple[str, bytes, bool]]:
     for item in data:
         if not isinstance(item, tuple):
             continue
-        yield _parse_fetch_item(item)
+        yield _parse_fetch_item(item, is_partial=is_partial)
 
 
-def _parse_fetch_item(item: tuple[object, ...]) -> tuple[str, bytes]:
+def _parse_fetch_item(
+    item: tuple[object, ...],
+    *,
+    is_partial: bool = False,
+) -> tuple[str, bytes, bool]:
     if len(item) < 2 or not isinstance(item[1], bytes):
         raise ImapReceiveError("IMAP FETCH response item did not include message bytes")
 
@@ -475,7 +489,13 @@ def _parse_fetch_item(item: tuple[object, ...]) -> tuple[str, bytes]:
     match = FETCH_UID_RE.search(metadata_bytes)
     if match is None:
         raise ImapReceiveError("IMAP FETCH response item did not include UID")
-    return match.group(1).decode("ascii"), item[1]
+    raw_message_complete = True
+    if is_partial:
+        size_match = RFC822_SIZE_RE.search(metadata_bytes)
+        raw_message_complete = (
+            size_match is not None and int(size_match.group(1)) == len(item[1])
+        )
+    return match.group(1).decode("ascii"), item[1], raw_message_complete
 
 
 def _metadata_bytes(value: object) -> bytes | None:
@@ -494,6 +514,7 @@ def email_record_from_message(
     uidvalidity: str,
     message: Message,
     raw_message: bytes,
+    raw_message_complete: bool = True,
 ) -> EmailRecord:
     subject = str(message.get("subject", ""))
     sender = str(message.get("from", ""))
@@ -515,6 +536,7 @@ def email_record_from_message(
         sent_at=sent_at,
         body_preview=body_preview,
         raw_message=raw_message,
+        raw_message_complete=raw_message_complete,
     )
 
 
