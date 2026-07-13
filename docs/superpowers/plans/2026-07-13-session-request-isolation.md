@@ -173,7 +173,7 @@ node --check mail_receiver/static/app_logic.js
 git diff --check
 ```
 
-Expected: 7 Node tests pass, syntax passes, and diff-check reports nothing.
+Expected at this checkpoint: 7 Node tests pass, syntax passes, and diff-check reports nothing.
 
 - [ ] **Step 5: Commit the coordinator**
 
@@ -181,6 +181,124 @@ Expected: 7 Node tests pass, syntax passes, and diff-check reports nothing.
 git add mail_receiver/static/app_logic.js tests/frontend_message_selection.test.js
 git commit -m "test: add frontend session coordinator"
 ```
+
+- [ ] **Step 6: Add failing reset reentrancy and abort-failure tests from quality review**
+
+Append:
+
+```javascript
+test('reset isolates reentrant requests and continues after abort failures', () => {
+  const abortAttempts = [];
+  let coordinator;
+  let reentrantRequest;
+  const firstController = {
+    abort() {
+      abortAttempts.push('first');
+      reentrantRequest = coordinator.startRequest();
+      throw new Error('abort failed');
+    },
+  };
+  const secondController = {
+    abort() {
+      abortAttempts.push('second');
+    },
+  };
+  const reentrantController = {
+    aborted: false,
+    abort() {
+      abortAttempts.push('reentrant');
+      this.aborted = true;
+    },
+  };
+  const controllers = [firstController, secondController, reentrantController];
+  let nextController = 0;
+  coordinator = createSessionCoordinator(() => controllers[nextController++]);
+
+  coordinator.startRequest();
+  coordinator.startRequest();
+
+  let revision;
+  assert.doesNotThrow(() => {
+    revision = coordinator.reset();
+  });
+  assert.equal(revision, 1);
+  assert.deepEqual(abortAttempts, ['first', 'second']);
+  assert.equal(reentrantRequest.revision, 1);
+  assert.strictEqual(reentrantRequest.controller, reentrantController);
+  assert.equal(reentrantController.aborted, false);
+});
+
+test('reset does not abort requests started by stale abort callbacks', () => {
+  const controllers = [];
+  let coordinator;
+  let reentrantRequest;
+  coordinator = createSessionCoordinator(() => {
+    const controllerIndex = controllers.length;
+    const controller = {
+      aborted: false,
+      signal: {},
+      abort() {
+        this.aborted = true;
+        if (controllerIndex === 0) {
+          reentrantRequest = coordinator.startRequest();
+        }
+      },
+    };
+    controllers.push(controller);
+    return controller;
+  });
+
+  coordinator.startRequest();
+  coordinator.startRequest();
+
+  assert.equal(coordinator.reset(), 1);
+  assert.equal(controllers[0].aborted, true);
+  assert.equal(controllers[1].aborted, true);
+  assert.equal(reentrantRequest.revision, 1);
+  assert.equal(controllers[2].aborted, false);
+  assert.equal(coordinator.isCurrent(reentrantRequest.revision), true);
+});
+```
+
+- [ ] **Step 7: Run the Node tests and verify the quality-review red state**
+
+```powershell
+node --test tests/frontend_message_selection.test.js
+```
+
+Expected: 7 tests pass and both new tests fail because `reset()` iterates the live controller set and lets one thrown abort stop cleanup.
+
+- [ ] **Step 8: Make reset reentrancy-safe and cancellation best-effort**
+
+Replace `reset()` with:
+
+```javascript
+function reset() {
+  revision += 1;
+  var staleControllers = Array.from(controllers);
+  controllers.clear();
+  staleControllers.forEach(function (controller) {
+    try {
+      controller.abort();
+    } catch (error) {
+      // Cancellation is best-effort; revision checks still isolate stale work.
+    }
+  });
+  return revision;
+}
+```
+
+- [ ] **Step 9: Verify and commit the quality-review fix**
+
+```powershell
+node --test tests/frontend_message_selection.test.js
+node --check mail_receiver/static/app_logic.js
+git diff --check
+git add mail_receiver/static/app_logic.js tests/frontend_message_selection.test.js
+git commit -m "fix: make session reset reentrancy-safe"
+```
+
+Expected: 9 Node tests pass, syntax passes, and diff-check reports nothing.
 
 ### Task 2: Guard Parse, Fetch, Retry, and Input Reset
 
@@ -505,7 +623,7 @@ node --check mail_receiver/static/app.js
 git diff --check
 ```
 
-Expected: focused test passes, 176 static UI tests pass, 7 Node tests pass, syntax and diff checks pass.
+Expected: focused test passes, 176 static UI tests pass, 9 Node tests pass, syntax and diff checks pass.
 
 - [ ] **Step 10: Commit the application wiring**
 
@@ -533,7 +651,7 @@ node --check mail_receiver/static/app.js
 git diff --check origin/main...HEAD
 ```
 
-Expected: 248 Python tests pass on both interpreters, 7 Node tests pass, JavaScript syntax checks and diff-check pass.
+Expected: 248 Python tests pass on both interpreters, 9 Node tests pass, JavaScript syntax checks and diff-check pass.
 
 - [ ] **Step 2: Run a rendered delayed-response regression**
 
