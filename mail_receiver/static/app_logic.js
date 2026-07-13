@@ -28,10 +28,15 @@
 
     function reset() {
       revision += 1;
-      controllers.forEach(function (controller) {
-        controller.abort();
-      });
+      var staleControllers = Array.from(controllers);
       controllers.clear();
+      staleControllers.forEach(function (controller) {
+        try {
+          controller.abort();
+        } catch (error) {
+          // Cancellation is best-effort; revision checks still isolate stale work.
+        }
+      });
       return revision;
     }
 

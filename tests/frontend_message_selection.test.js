@@ -156,6 +156,51 @@ test('reset aborts active requests and advances the session revision', () => {
   assert.equal(coordinator.currentRevision(), 2);
 });
 
+test('reset isolates reentrant requests and continues after abort failures', () => {
+  const abortAttempts = [];
+  let coordinator;
+  let reentrantRequest;
+  const firstController = {
+    abort() {
+      abortAttempts.push('first');
+      reentrantRequest = coordinator.startRequest();
+      throw new Error('abort failed');
+    },
+  };
+  const secondController = {
+    abort() {
+      abortAttempts.push('second');
+    },
+  };
+  const reentrantController = {
+    aborted: false,
+    abort() {
+      abortAttempts.push('reentrant');
+      this.aborted = true;
+    },
+  };
+  const controllers = [
+    firstController,
+    secondController,
+    reentrantController,
+  ];
+  let nextController = 0;
+  coordinator = createSessionCoordinator(() => controllers[nextController++]);
+
+  coordinator.startRequest();
+  coordinator.startRequest();
+
+  let revision;
+  assert.doesNotThrow(() => {
+    revision = coordinator.reset();
+  });
+  assert.equal(revision, 1);
+  assert.deepEqual(abortAttempts, ['first', 'second']);
+  assert.equal(reentrantRequest.revision, 1);
+  assert.strictEqual(reentrantRequest.controller, reentrantController);
+  assert.equal(reentrantController.aborted, false);
+});
+
 test('finished requests are not aborted by a later reset', () => {
   const controllers = [];
   const coordinator = createSessionCoordinator(() => {
@@ -178,4 +223,35 @@ test('finished requests are not aborted by a later reset', () => {
   const current = coordinator.startRequest();
   assert.equal(current.revision, 1);
   assert.equal(coordinator.isCurrent(current.revision), true);
+});
+
+test('reset does not abort requests started by stale abort callbacks', () => {
+  const controllers = [];
+  let coordinator;
+  let reentrantRequest;
+  coordinator = createSessionCoordinator(() => {
+    const controllerIndex = controllers.length;
+    const controller = {
+      aborted: false,
+      signal: {},
+      abort() {
+        this.aborted = true;
+        if (controllerIndex === 0) {
+          reentrantRequest = coordinator.startRequest();
+        }
+      },
+    };
+    controllers.push(controller);
+    return controller;
+  });
+
+  coordinator.startRequest();
+  coordinator.startRequest();
+
+  assert.equal(coordinator.reset(), 1);
+  assert.equal(controllers[0].aborted, true);
+  assert.equal(controllers[1].aborted, true);
+  assert.equal(reentrantRequest.revision, 1);
+  assert.equal(controllers[2].aborted, false);
+  assert.equal(coordinator.isCurrent(reentrantRequest.revision), true);
 });
