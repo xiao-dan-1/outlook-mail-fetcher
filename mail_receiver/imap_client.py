@@ -521,7 +521,7 @@ def email_record_from_message(
 def _decode_text_payload(payload: bytes, charset: str | None) -> str:
     try:
         return payload.decode(charset or "utf-8", errors="replace")
-    except LookupError:
+    except (LookupError, UnicodeError):
         return payload.decode("utf-8", errors="replace")
 
 

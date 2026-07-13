@@ -264,28 +264,30 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         self.assertEqual({record.uidvalidity for record in records}, {"98765"})
 
     def test_fetch_messages_keeps_batch_when_message_has_unknown_charset(self) -> None:
-        InstrumentedIMAP.reset(count=2)
-        unknown_charset_message = (
-            b"Message-ID: <1@example.com>\r\n"
-            b"Content-Type: text/plain; charset=x-fixture-unknown\r\n"
-            b"Content-Transfer-Encoding: 8bit\r\n"
-            b"\r\n"
-            + "Verification code: 你好 123456".encode("utf-8")
-        )
-        InstrumentedIMAP.messages = [
-            ("1", unknown_charset_message),
-            ("2", _raw_message("2")),
-        ]
+        for charset in ("x-fixture-unknown", "idna"):
+            with self.subTest(charset=charset):
+                InstrumentedIMAP.reset(count=2)
+                fallback_charset_message = (
+                    b"Message-ID: <1@example.com>\r\n"
+                    + f"Content-Type: text/plain; charset={charset}\r\n".encode("ascii")
+                    + b"Content-Transfer-Encoding: 8bit\r\n"
+                    b"\r\n"
+                    + "Verification code: 你好 123456".encode("utf-8")
+                )
+                InstrumentedIMAP.messages = [
+                    ("1", fallback_charset_message),
+                    ("2", _raw_message("2")),
+                ]
 
-        with patch(
-            "mail_receiver.imap_client.refresh_access_token",
-            return_value=SimpleNamespace(access_token="access-token"),
-        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
-            records = fetch_messages(_account(), limit=2)
+                with patch(
+                    "mail_receiver.imap_client.refresh_access_token",
+                    return_value=SimpleNamespace(access_token="access-token"),
+                ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+                    records = fetch_messages(_account(), limit=2)
 
-        self.assertEqual([record.uid for record in records], ["1", "2"])
-        self.assertEqual(records[0].body_preview, "Verification code: 你好 123456")
-        self.assertEqual(records[1].body_preview, "Body 2")
+                self.assertEqual([record.uid for record in records], ["1", "2"])
+                self.assertEqual(records[0].body_preview, "Verification code: 你好 123456")
+                self.assertEqual(records[1].body_preview, "Body 2")
 
     def test_fetch_messages_falls_back_to_select_uidvalidity_when_response_raises(self) -> None:
         InstrumentedIMAP.reset(count=1, uidvalidity=b"98765", select_uidvalidity=b"13579")
