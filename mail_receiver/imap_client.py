@@ -518,6 +518,13 @@ def email_record_from_message(
     )
 
 
+def _decode_text_payload(payload: bytes, charset: str | None) -> str:
+    try:
+        return payload.decode(charset or "utf-8", errors="replace")
+    except LookupError:
+        return payload.decode("utf-8", errors="replace")
+
+
 def extract_body_text(message: Message) -> str:
     if message.is_multipart():
         plain_parts: list[str] = []
@@ -533,8 +540,8 @@ def extract_body_text(message: Message) -> str:
                 content = part.get_content()
             except Exception:
                 payload = part.get_payload(decode=True) or b""
-                charset = part.get_content_charset() or "utf-8"
-                content = payload.decode(charset, errors="replace")
+                charset = part.get_content_charset()
+                content = _decode_text_payload(payload, charset)
             if content_type == "text/plain":
                 plain_parts.append(str(content))
             elif content_type == "text/html":
@@ -550,8 +557,8 @@ def extract_body_text(message: Message) -> str:
             if message.get_content_type() == "text/html":
                 return _html_to_text(content)
             return content
-        charset = message.get_content_charset() or "utf-8"
-        content = payload.decode(charset, errors="replace").strip()
+        charset = message.get_content_charset()
+        content = _decode_text_payload(payload, charset).strip()
     if message.get_content_type() == "text/html":
         return _html_to_text(content)
     return content
