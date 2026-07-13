@@ -1,10 +1,12 @@
+const { findMessageByKey, messageKey } = window.MailReceiverLogic;
+
 const state = {
   config: null,
   accounts: [],
   accountStatus: new Map(),
   failedRows: [],
   messagesByAccount: new Map(),
-  selectedEmailId: null,
+  selectedMessageKey: null,
   selectedAccountEmail: "",
   activeAccountEmail: "",
   fetchScope: "selected",
@@ -424,7 +426,7 @@ function extractVerificationCode(mail) {
 }
 
 function selectedMail() {
-  return allSessionMessages().find((mail) => mail.id === state.selectedEmailId) || null;
+  return findMessageByKey(allSessionMessages(), state.selectedMessageKey);
 }
 
 function verificationRows() {
@@ -831,7 +833,7 @@ function setFetchScope(scope) {
 function selectAccount(email) {
   state.activeAccountEmail = email;
   state.selectedAccountEmail = email;
-  state.selectedEmailId = null;
+  state.selectedMessageKey = null;
   renderAccounts(state.accounts);
   renderResults(visibleMessages());
   selectInitialMessage(visibleMessages());
@@ -1214,7 +1216,7 @@ function mailErrorActionsMarkup() {
 function renderMailLoadingState(label) {
   renderMailSummary([], { kind: "loading", label });
   setMailBusyState(true);
-  state.selectedEmailId = null;
+  state.selectedMessageKey = null;
   el.mailList.classList.remove("empty");
   el.mailList.removeAttribute("aria-activedescendant");
   el.mailList.innerHTML = `
@@ -1282,7 +1284,7 @@ function renderMailErrorState(message) {
   const insight = failureInsight(detail);
   setMailBusyState(false);
   renderMailSummary([], { kind: "error", label: insight.title, description: `${insight.summary} ${insight.nextStep}` });
-  state.selectedEmailId = null;
+  state.selectedMessageKey = null;
   el.mailList.classList.add("empty");
   el.mailList.removeAttribute("aria-activedescendant");
   el.mailList.innerHTML = `
@@ -1339,7 +1341,7 @@ function wireMailErrorRetryButton(button) {
 function resetSessionResults() {
   state.failedRows = [];
   state.messagesByAccount.clear();
-  state.selectedEmailId = null;
+  state.selectedMessageKey = null;
   state.activeAccountEmail = "";
   renderResults([]);
   renderMailDetailPlaceholder();
@@ -1609,26 +1611,28 @@ function renderResults(results) {
   el.mailList.classList.toggle("empty", !results.length);
   renderMailSummary(results);
   if (!results.length) {
-    state.selectedEmailId = null;
+    state.selectedMessageKey = null;
     renderMailDetailPlaceholder();
     el.mailList.innerHTML = mailListEmptyMarkup();
     syncSessionActions();
     return;
   }
 
-  for (const mail of results) {
+  for (const [index, mail] of results.entries()) {
+    const key = messageKey(mail);
     const preview = readableMailPreview(mail);
     const displayDate = formatMailDate(mail.sent_at);
     const senderName = senderDisplayName(mail.sender);
     const senderAddressText = senderAddress(mail.sender);
     const senderInitialValue = senderInitial(mail.sender);
     const button = document.createElement("button");
-    const isSelected = mail.id === state.selectedEmailId;
+    const isSelected = key === state.selectedMessageKey;
     button.type = "button";
     button.dataset.mailId = String(mail.id);
-    button.id = `mail-row-${String(mail.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    button.dataset.messageKey = key;
+    button.id = `mail-row-${index}`;
     button.className = `mail-row ${isSelected ? "active" : ""}`.trim();
-    button.tabIndex = isSelected || (!state.selectedEmailId && mail === results[0]) ? 0 : -1;
+    button.tabIndex = isSelected || (!state.selectedMessageKey && mail === results[0]) ? 0 : -1;
     button.setAttribute("role", "option");
     button.setAttribute("aria-selected", String(isSelected));
     button.setAttribute("aria-label", `${mail.subject || "(无主题)"}，${senderName}，${mail.account_email || "未知账号"}，${displayDate}`);
@@ -1649,7 +1653,7 @@ function renderResults(results) {
         <span class="mail-time">${escapeHtml(displayDate)}</span>
       </div>
     `;
-    button.addEventListener("click", () => showEmail(mail.id));
+    button.addEventListener("click", () => showEmail(key));
     el.mailList.append(button);
   }
   syncSessionActions();
@@ -1659,13 +1663,14 @@ function selectInitialMessage(results = visibleMessages()) {
   if (!results.length) {
     return;
   }
-  const selectedStillExists = results.some((mail) => mail.id === state.selectedEmailId);
-  showEmail(selectedStillExists ? state.selectedEmailId : results[0].id);
+  const selectedStillExists = results.some((mail) => messageKey(mail) === state.selectedMessageKey);
+  const key = selectedStillExists ? state.selectedMessageKey : messageKey(results[0]);
+  showEmail(key, results);
 }
 
 function focusSelectedMail() {
   for (const row of el.mailList.querySelectorAll(".mail-row")) {
-    if (row.dataset.mailId === String(state.selectedEmailId)) {
+    if (row.dataset.messageKey === state.selectedMessageKey) {
       row.focus({ preventScroll: true });
       row.scrollIntoView({ block: "nearest" });
       return;
@@ -1681,9 +1686,9 @@ function handleMailListKeydown(event) {
   }
 
   event.preventDefault();
-  const focusedMailId = event.target?.dataset?.mailId;
-  const activeId = state.selectedEmailId ?? focusedMailId ?? results[0].id;
-  const currentIndex = Math.max(0, results.findIndex((mail) => String(mail.id) === String(activeId)));
+  const focusedMessageKey = event.target?.dataset?.messageKey;
+  const activeKey = state.selectedMessageKey ?? focusedMessageKey ?? messageKey(results[0]);
+  const currentIndex = Math.max(0, results.findIndex((mail) => messageKey(mail) === activeKey));
   let nextIndex = currentIndex;
 
   if (event.key === "ArrowDown") {
@@ -1696,7 +1701,7 @@ function handleMailListKeydown(event) {
     nextIndex = results.length - 1;
   }
 
-  showEmail(results[nextIndex].id);
+  showEmail(messageKey(results[nextIndex]), results);
   focusSelectedMail();
 }
 
@@ -1731,7 +1736,7 @@ function verificationCodeCardMarkup(mail) {
 
 function renderDetail(mail) {
   setMailBusyState(false);
-  state.selectedEmailId = mail.id;
+  state.selectedMessageKey = messageKey(mail);
   const readableBody = readableMailText(mail) || "没有可读正文预览。";
   const bodyLength = readableBody.length;
   const displayDate = formatMailDate(mail.sent_at);
@@ -1902,15 +1907,15 @@ async function ensureParsed() {
   }
 }
 
-function showEmail(id, results = visibleMessages()) {
-  const mail = results.find((item) => item.id === id);
+function showEmail(key, results = visibleMessages()) {
+  const mail = findMessageByKey(results, key);
   if (!mail) {
-    addLog(`邮件不存在：${id}`, "fail");
+    addLog(`邮件不存在：${key}`, "fail");
     return;
   }
   renderDetail(mail);
   for (const row of el.mailList.querySelectorAll(".mail-row")) {
-    const isSelected = row.dataset.mailId === String(id);
+    const isSelected = row.dataset.messageKey === key;
     row.classList.toggle("active", isSelected);
     row.setAttribute("aria-selected", String(isSelected));
     row.tabIndex = isSelected ? 0 : -1;

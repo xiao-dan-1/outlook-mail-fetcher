@@ -2020,7 +2020,7 @@ class StaticUiTests(unittest.TestCase):
 
         self.assertIn("function selectInitialMessage", js)
         self.assertIn("selectInitialMessage(visibleMessages());", js)
-        self.assertIn("results[0].id", js)
+        self.assertIn("messageKey(results[0])", js)
         self.assertIn("mail-row-status-dot", js)
         self.assertIn(".mail-row.active::before", css)
         self.assertIn(".mail-row-status-dot", css)
@@ -2714,6 +2714,27 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("Home", js)
         self.assertIn("End", js)
         self.assertIn(".mail-row:focus-visible", css)
+
+    def test_message_selection_uses_stable_cross_account_keys(self) -> None:
+        html = STATIC_HTML.read_text(encoding="utf-8")
+        js = STATIC_JS.read_text(encoding="utf-8")
+
+        logic_script = '<script src="/static/app_logic.js"></script>'
+        app_script = '<script src="/static/app.js"></script>'
+        self.assertIn(logic_script, html)
+        self.assertIn(app_script, html)
+        self.assertLess(html.index(logic_script), html.index(app_script))
+        self.assertIn(
+            "const { findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            js,
+        )
+        self.assertIn("selectedMessageKey: null", js)
+        self.assertIn(
+            "findMessageByKey(allSessionMessages(), state.selectedMessageKey)",
+            js,
+        )
+        self.assertIn("button.dataset.messageKey = key", js)
+        self.assertNotIn("selectedEmailId", js)
 
     def test_mail_rows_separate_sender_and_preview_hierarchy(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
