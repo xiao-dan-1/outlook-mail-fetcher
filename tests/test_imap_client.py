@@ -235,6 +235,7 @@ class InstrumentedIMAP:
     select_error: BaseException | None = None
     search_status = "OK"
     search_error: BaseException | None = None
+    search_result: bytes | None = None
     fetch_status = "OK"
     fetch_error: BaseException | None = None
     response_error: BaseException | None = None
@@ -267,6 +268,7 @@ class InstrumentedIMAP:
         cls.select_error = None
         cls.search_status = "OK"
         cls.search_error = None
+        cls.search_result = None
         cls.fetch_status = "OK"
         cls.fetch_error = None
         cls.response_error = None
@@ -309,7 +311,9 @@ class InstrumentedIMAP:
                 raise self.search_error
             if self.search_status != "OK":
                 return self.search_status, [b""]
-            uids = b" ".join(uid.encode("ascii") for uid, _ in self.messages)
+            uids = self.search_result
+            if uids is None:
+                uids = b" ".join(uid.encode("ascii") for uid, _ in self.messages)
             if self.expunge_uid_after_search is not None:
                 self.messages = [
                     (uid, raw)
@@ -355,6 +359,46 @@ class InstrumentedSocket:
 
 
 class FetchMessagesInstrumentedTests(unittest.TestCase):
+    def test_fetch_messages_sorts_uid_search_results_before_taking_last_uids(self) -> None:
+        InstrumentedIMAP.reset(count=0)
+        InstrumentedIMAP.messages = [
+            ("2", _raw_message("2")),
+            ("7", _raw_message("7")),
+            ("20", _raw_message("20")),
+            ("42", _raw_message("42")),
+        ]
+        InstrumentedIMAP.search_result = b"42 2 20 7"
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            records = fetch_messages(_account(), limit=2)
+
+        client = InstrumentedIMAP.instances[0]
+        self.assertEqual([record.uid for record in records], ["20", "42"])
+        self.assertIn(("UID", "FETCH", "20,42", "(UID BODY.PEEK[])"), client.commands)
+
+    def test_fetch_messages_deduplicates_uid_search_results_before_applying_limit(self) -> None:
+        InstrumentedIMAP.reset(count=0)
+        InstrumentedIMAP.messages = [
+            ("2", _raw_message("2")),
+            ("7", _raw_message("7")),
+            ("20", _raw_message("20")),
+            ("42", _raw_message("42")),
+        ]
+        InstrumentedIMAP.search_result = b"2 7 20 42 42"
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            records = fetch_messages(_account(), limit=2)
+
+        client = InstrumentedIMAP.instances[0]
+        self.assertEqual([record.uid for record in records], ["20", "42"])
+        self.assertIn(("UID", "FETCH", "20,42", "(UID BODY.PEEK[])"), client.commands)
+
     def test_fetch_messages_uses_one_uid_fetch_for_last_non_contiguous_uids(self) -> None:
         InstrumentedIMAP.reset(count=0)
         InstrumentedIMAP.messages = [

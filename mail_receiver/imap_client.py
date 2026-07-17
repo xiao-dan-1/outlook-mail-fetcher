@@ -343,7 +343,7 @@ def _search_message_uids(client: imaplib.IMAP4_SSL) -> list[str]:
             if not uid.isdigit():
                 raise ImapReceiveError("IMAP UID SEARCH response included an invalid UID")
             uids.append(uid.decode("ascii"))
-    return uids
+    return sorted(set(uids), key=int)
 
 
 def _fetch_message_payloads_by_uid(
