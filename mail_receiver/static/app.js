@@ -665,9 +665,22 @@ function shouldAutoParseAccountText() {
   return report.totalLines > 0 && report.invalidLines === 0;
 }
 
+function hasAccountSessionState() {
+  return state.busy
+    || state.accounts.length > 0
+    || state.accountStatus.size > 0
+    || state.failedRows.length > 0
+    || state.messagesByAccount.size > 0
+    || Boolean(state.selectedMessageKey || state.selectedAccountEmail || state.activeAccountEmail || state.parsedText);
+}
+
 function scheduleAccountParse() {
   clearScheduledAccountParse();
   if (!shouldAutoParseAccountText()) {
+    const report = inspectAccountText(el.accountTextInput.value);
+    if (hasAccountSessionState()) {
+      rejectInvalidAccountInput(report);
+    }
     return;
   }
   const scheduledText = el.accountTextInput.value.trim();

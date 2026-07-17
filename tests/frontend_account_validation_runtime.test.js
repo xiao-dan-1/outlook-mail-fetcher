@@ -347,6 +347,33 @@ test('an auto-parse timer cannot POST after the input becomes invalid', async ()
   assert.equal(harness.runtime.state.busy, false);
 });
 
+test('a stale auto-parse timer clears an old busy account session when the new input is invalid', async () => {
+  const oldAccountText = 'old@outlook.com----password----client-id----refresh-token';
+  const harness = createRuntime({
+    accountText: VALID_ACCOUNT,
+    accounts: [{ email: 'old@outlook.com' }],
+    parsedText: oldAccountText,
+  });
+  harness.runtime.state.selectedAccountEmail = 'old@outlook.com';
+  harness.runtime.state.accountStatus.set('old@outlook.com', { kind: 'busy' });
+  harness.runtime.state.busy = true;
+
+  harness.runtime.scheduleAccountParse();
+  assert.equal(harness.timerCount(), 1);
+  harness.elementFor('accountTextInput').value =
+    'user@outlook.com----password----client-id----   ';
+  harness.runNextTimer();
+  await Promise.resolve();
+
+  assert.deepEqual(harness.requests, []);
+  assert.equal(harness.timerCount(), 0);
+  assert.equal(harness.runtime.state.accounts.length, 0);
+  assert.equal(harness.runtime.state.parsedText, '');
+  assert.equal(harness.runtime.state.selectedAccountEmail, '');
+  assert.equal(harness.runtime.state.accountStatus.size, 0);
+  assert.equal(harness.runtime.state.busy, false);
+});
+
 test('valid account input still parses and fetches normally', async () => {
   const harness = createRuntime({ accountText: VALID_ACCOUNT });
 
