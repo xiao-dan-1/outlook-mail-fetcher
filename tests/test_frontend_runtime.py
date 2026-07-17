@@ -39,6 +39,9 @@ class FrontendRuntimeTests(unittest.TestCase):
     def test_theme_runtime(self) -> None:
         self.assert_node_test_passes("tests/frontend_theme_runtime.test.js")
 
+    def test_account_validation_runtime(self) -> None:
+        self.assert_node_test_passes("tests/frontend_account_validation_runtime.test.js")
+
 
 if __name__ == "__main__":
     unittest.main()

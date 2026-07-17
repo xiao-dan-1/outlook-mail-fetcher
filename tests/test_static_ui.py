@@ -2280,15 +2280,17 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("@media (max-width: 960px)", css)
         self.assertIn("@media (max-width: 560px)", css)
 
-    def test_primary_actions_are_disabled_until_account_text_exists(self) -> None:
+    def test_primary_actions_are_disabled_until_account_text_is_fully_valid(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
         css = STATIC_CSS.read_text(encoding="utf-8")
         sync_action_block = js[js.index("function syncActionAvailability"):js.index("function setBusy")]
 
         self.assertIn("function hasAccountInput", js)
+        self.assertIn("function hasValidAccountInput", js)
         self.assertIn("function syncActionAvailability", js)
         self.assertIn("state.busy", js)
-        self.assertIn("button.disabled = state.busy || !hasInput", js)
+        self.assertIn("const hasValidInput = hasValidAccountInput();", sync_action_block)
+        self.assertIn("button.disabled = state.busy || !hasValidInput", js)
         self.assertIn('button.setAttribute("aria-busy", String(state.busy));', sync_action_block)
         self.assertIn('button.classList.toggle("is-busy", state.busy);', sync_action_block)
         self.assertIn("syncActionAvailability();", js)

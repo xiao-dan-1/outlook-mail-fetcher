@@ -610,8 +610,10 @@ function inspectAccountText(value) {
   let validLines = 0;
   let invalidLines = 0;
   for (const line of lines) {
-    const parts = line.split("----");
-    const looksValid = parts.length === 4 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parts[0] || "");
+    const parts = line.split("----").map((part) => part.trim());
+    const looksValid = parts.length === 4
+      && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parts[0] || "")
+      && parts.slice(1).every(Boolean);
     if (looksValid) {
       validLines += 1;
     } else {
@@ -686,6 +688,11 @@ function hasAccountInput() {
   return Boolean(el.accountTextInput.value.trim());
 }
 
+function hasValidAccountInput() {
+  const report = inspectAccountText(el.accountTextInput.value);
+  return report.totalLines > 0 && report.invalidLines === 0;
+}
+
 function resetAccountPrivacyWhenEmpty() {
   if (!hasAccountInput()) {
     state.accountPrivacy = true;
@@ -704,14 +711,15 @@ function syncAccountPrivacy() {
 
 function syncActionAvailability() {
   const hasInput = hasAccountInput();
+  const hasValidInput = hasValidAccountInput();
   for (const button of [
     el.fetchBtn,
   ].filter(Boolean)) {
     button.setAttribute("aria-busy", String(state.busy));
     button.classList.toggle("is-busy", state.busy);
-    button.disabled = state.busy || !hasInput;
-    button.setAttribute("aria-disabled", String(state.busy || !hasInput));
-    button.title = hasInput ? "" : "请先粘贴账号信息";
+    button.disabled = state.busy || !hasValidInput;
+    button.setAttribute("aria-disabled", String(state.busy || !hasValidInput));
+    button.title = !hasInput ? "请先粘贴账号信息" : hasValidInput ? "" : "请检查账号格式";
   }
   syncFetchScopeControls();
 }
@@ -734,6 +742,9 @@ function payloadBase() {
   const accountText = el.accountTextInput.value.trim();
   if (!accountText) {
     throw new Error("请先粘贴账号信息");
+  }
+  if (!hasValidAccountInput()) {
+    throw new Error("请检查账号格式");
   }
   return {
     account_text: accountText,
@@ -1872,9 +1883,26 @@ async function loadConfig() {
   syncActionAvailability();
 }
 
+function rejectInvalidAccountInput(report = inspectAccountText(el.accountTextInput.value)) {
+  clearScheduledAccountParse();
+  sessionRequests.reset();
+  state.accountStatus.clear();
+  state.selectedAccountEmail = "";
+  state.parsedText = "";
+  resetSessionResults();
+  renderAccounts([]);
+  setBusy(false);
+  setStatus(report.totalLines ? "账号格式需要检查" : "请先粘贴账号信息", report.totalLines ? "warning" : "ready");
+  return false;
+}
+
 async function parseInput(options = {}) {
   const source = options.source || "manual";
   const accountText = el.accountTextInput.value.trim();
+  const report = inspectAccountText(accountText);
+  if (!report.totalLines || report.invalidLines) {
+    return rejectInvalidAccountInput(report);
+  }
   if (state.accounts.length && state.parsedText === accountText) {
     return true;
   }
@@ -1989,6 +2017,10 @@ async function fetchMail() {
 
 async function ensureParsed() {
   clearScheduledAccountParse();
+  const report = inspectAccountText(el.accountTextInput.value);
+  if (!report.totalLines || report.invalidLines) {
+    return rejectInvalidAccountInput(report);
+  }
   if (state.accounts.length && state.parsedText === el.accountTextInput.value.trim()) {
     return true;
   }
