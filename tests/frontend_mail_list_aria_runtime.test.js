@@ -126,12 +126,14 @@ function createRuntime() {
 globalThis.__mailListAriaRuntimeTest = {
   state,
   fetchMail,
+  mailOperationGate,
   renderMailErrorState,
   renderMailLoadingState,
   renderResults,
   resetSessionResults,
   selectAccount,
   selectInitialMessage,
+  sessionRequests,
 };
 `;
   vm.runInContext(`${APP_RUNTIME_SOURCE}\n${bridge}`, context, {
@@ -164,6 +166,54 @@ function message(accountEmail, uid, subject = `Message ${uid}`) {
     body_preview: `Preview ${uid}`,
     body_text: `Body ${uid}`,
   };
+}
+
+function successResponse(data = {}) {
+  return {
+    ok: true,
+    async json() {
+      return {
+        fetched: 1,
+        failed: 0,
+        rows: [],
+        messages: [],
+        ...data,
+      };
+    },
+  };
+}
+
+async function waitFor(predicate, messageText = 'condition was not reached') {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.fail(messageText);
+}
+
+function configureAccount(harness, accountEmail) {
+  const accountText = `${accountEmail}----password----client-id----refresh-token`;
+  harness.elementFor('accountTextInput').value = accountText;
+  harness.runtime.state.accounts = [{ email: accountEmail }];
+  harness.runtime.state.parsedText = accountText;
+  harness.runtime.state.selectedAccountEmail = accountEmail;
+  harness.runtime.state.activeAccountEmail = accountEmail;
+  harness.runtime.state.fetchScope = 'selected';
+}
+
+function resetInputSession(harness) {
+  harness.runtime.sessionRequests.reset();
+  harness.runtime.mailOperationGate.reset();
+  harness.elementFor('accountTextInput').value = '';
+  harness.runtime.state.accounts = [];
+  harness.runtime.state.accountStatus.clear();
+  harness.runtime.state.selectedAccountEmail = '';
+  harness.runtime.state.activeAccountEmail = '';
+  harness.runtime.state.fetchScope = 'selected';
+  harness.runtime.state.parsedText = '';
+  harness.runtime.resetSessionResults();
 }
 
 function assertNoListboxSemantics(harness) {
@@ -241,13 +291,7 @@ test('a fetch failure that re-renders preserved messages keeps populated listbox
   const harness = createRuntime();
   const accountEmail = 'first@outlook.com';
   const preserved = message(accountEmail, 1);
-  const accountText = `${accountEmail}----password----client-id----refresh-token`;
-  harness.elementFor('accountTextInput').value = accountText;
-  harness.runtime.state.accounts = [{ email: accountEmail }];
-  harness.runtime.state.parsedText = accountText;
-  harness.runtime.state.selectedAccountEmail = accountEmail;
-  harness.runtime.state.activeAccountEmail = accountEmail;
-  harness.runtime.state.fetchScope = 'selected';
+  configureAccount(harness, accountEmail);
   harness.runtime.state.messagesByAccount.set(accountEmail, [preserved]);
   harness.context.fetch = async () => {
     throw new Error('network unavailable');
@@ -260,6 +304,68 @@ test('a fetch failure that re-renders preserved messages keeps populated listbox
   const activeId = harness.mailList.getAttribute('aria-activedescendant');
   assert.ok(harness.mailList.children.some((row) => row.id === activeId));
   assert.equal(harness.runtime.state.selectedMessageKey, logic.messageKey(preserved));
+});
+
+test('a late fetch success cannot restore listbox semantics after an input reset', async () => {
+  const harness = createRuntime();
+  const accountEmail = 'first@outlook.com';
+  const lateMessage = message(accountEmail, 9, 'Late response');
+  configureAccount(harness, accountEmail);
+  let resolveFetch;
+  harness.context.fetch = () => new Promise((resolve) => {
+    resolveFetch = resolve;
+  });
+
+  const operation = harness.runtime.fetchMail();
+  await waitFor(() => typeof resolveFetch === 'function', 'fetch did not start');
+  assert.match(harness.mailList.innerHTML, /mail-loading-state/);
+  assertNoListboxSemantics(harness);
+
+  resetInputSession(harness);
+  const resetMarkup = harness.mailList.innerHTML;
+  assertNoListboxSemantics(harness);
+  resolveFetch(successResponse({
+    rows: [{
+      email: accountEmail,
+      ok: true,
+      fetched: 1,
+      elapsed_ms: 1,
+      raw_bytes: 10,
+      downloaded_bytes: 10,
+      message_count: 1,
+      timings: {},
+    }],
+    messages: [lateMessage],
+  }));
+  await operation;
+
+  assertNoListboxSemantics(harness);
+  assert.equal(harness.mailList.innerHTML, resetMarkup);
+  assert.equal(harness.mailList.children.length, 0);
+  assert.equal(harness.runtime.state.messagesByAccount.size, 0);
+  assert.equal(harness.runtime.state.accountStatus.size, 0);
+});
+
+test('a late fetch rejection cannot replace reset markup with an error state', async () => {
+  const harness = createRuntime();
+  const accountEmail = 'first@outlook.com';
+  configureAccount(harness, accountEmail);
+  let rejectFetch;
+  harness.context.fetch = () => new Promise((resolve, reject) => {
+    rejectFetch = reject;
+  });
+
+  const operation = harness.runtime.fetchMail();
+  await waitFor(() => typeof rejectFetch === 'function', 'fetch did not start');
+  resetInputSession(harness);
+  const resetMarkup = harness.mailList.innerHTML;
+  rejectFetch(new Error('late network failure'));
+  await operation;
+
+  assertNoListboxSemantics(harness);
+  assert.equal(harness.mailList.innerHTML, resetMarkup);
+  assert.doesNotMatch(harness.mailList.innerHTML, /mail-error-state/);
+  assert.equal(harness.runtime.state.accountStatus.size, 0);
 });
 
 test('switching from a populated account to an empty account leaves no stale active descendant', () => {
