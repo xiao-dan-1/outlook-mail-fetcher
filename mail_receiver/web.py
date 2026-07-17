@@ -377,7 +377,13 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(body)
 
         def _read_json(self) -> dict[str, Any]:
-            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw_length = self.headers.get("Content-Length")
+            if raw_length in (None, ""):
+                length = 0
+            else:
+                if not raw_length.isascii() or not raw_length.isdigit():
+                    raise ValueError("invalid Content-Length header")
+                length = int(raw_length)
             if length <= 0:
                 return {}
             body = self.rfile.read(length)

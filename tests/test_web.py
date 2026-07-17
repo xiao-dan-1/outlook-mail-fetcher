@@ -70,14 +70,17 @@ class WebServiceTests(unittest.TestCase):
         self.assert_json_error(response, 400)
 
     def test_post_invalid_content_length_returns_json_bad_request(self) -> None:
-        response = self.request_json(
-            "POST",
-            "/api/accounts",
-            body=b"{}",
-            headers={"Content-Length": "not-a-number"},
-        )
+        for content_length in ("not-a-number", "-1", "+2"):
+            with self.subTest(content_length=content_length):
+                response = self.request_json(
+                    "POST",
+                    "/api/accounts",
+                    body=b"{}",
+                    headers={"Content-Length": content_length},
+                )
 
-        self.assert_json_error(response, 400)
+                self.assert_json_error(response, 400)
+                self.assertIn("Content-Length", response[2]["error"])
 
     def test_post_requires_top_level_json_object(self) -> None:
         for body in (b"[]", b"null", b'"text"', b"42"):
