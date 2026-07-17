@@ -63,10 +63,12 @@ class WebServiceTests(unittest.TestCase):
         read_timeout: float = 0.1,
         shutdown_write: bool = False,
         client_timeout: float = 1.0,
+        expect_eof: bool = False,
     ) -> tuple[int, str | None, dict]:
         handler = create_handler(WebConfig())
         handler.max_json_body_bytes = max_body_bytes
         handler.request_read_timeout = read_timeout
+        handler.protocol_version = "HTTP/1.1"
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -91,7 +93,7 @@ class WebServiceTests(unittest.TestCase):
                     if line.lower().startswith(b"content-length:"):
                         content_length = int(line.split(b":", 1)[1].strip())
                         break
-                if len(body) >= content_length:
+                if len(body) >= content_length and not expect_eof:
                     break
         finally:
             sock.close()
@@ -186,9 +188,10 @@ class WebServiceTests(unittest.TestCase):
             b"POST /api/accounts HTTP/1.1\r\n"
             b"Host: 127.0.0.1\r\n"
             b"Content-Length: 10\r\n"
-            b"Connection: close\r\n\r\n"
+            b"\r\n"
             b"{",
             read_timeout=0.05,
+            expect_eof=True,
         )
 
         self.assert_json_error(response, 408)
