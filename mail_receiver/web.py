@@ -9,7 +9,7 @@ import socket
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from time import perf_counter
+from time import monotonic, perf_counter
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -406,12 +406,26 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
                 )
             previous_timeout = self.connection.gettimeout()
             try:
-                self.connection.settimeout(self.request_read_timeout)
-                try:
-                    body = self.rfile.read(length)
-                except (TimeoutError, socket.timeout) as exc:
-                    self.close_connection = True
-                    raise RequestBodyTimeoutError("JSON request body read timed out") from exc
+                deadline = monotonic() + self.request_read_timeout
+                chunks: list[bytes] = []
+                remaining = length
+                read_chunk = getattr(self.rfile, "read1", self.rfile.read)
+                while remaining:
+                    timeout = deadline - monotonic()
+                    if timeout <= 0:
+                        self.close_connection = True
+                        raise RequestBodyTimeoutError("JSON request body read timed out")
+                    self.connection.settimeout(timeout)
+                    try:
+                        chunk = read_chunk(min(remaining, 64 * 1024))
+                    except (TimeoutError, socket.timeout) as exc:
+                        self.close_connection = True
+                        raise RequestBodyTimeoutError("JSON request body read timed out") from exc
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    remaining -= len(chunk)
+                body = b"".join(chunks)
             finally:
                 self.connection.settimeout(previous_timeout)
             if len(body) != length:

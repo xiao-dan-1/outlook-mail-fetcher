@@ -7,6 +7,7 @@ import io
 import json
 import socket
 import threading
+import time
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -64,6 +65,8 @@ class WebServiceTests(unittest.TestCase):
         shutdown_write: bool = False,
         client_timeout: float = 1.0,
         expect_eof: bool = False,
+        delayed_chunks: tuple[bytes, ...] = (),
+        chunk_delay: float = 0.0,
     ) -> tuple[int, str | None, dict]:
         handler = create_handler(WebConfig())
         handler.max_json_body_bytes = max_body_bytes
@@ -74,8 +77,20 @@ class WebServiceTests(unittest.TestCase):
         thread.start()
         sock = socket.create_connection(server.server_address, timeout=client_timeout)
         sock.settimeout(client_timeout)
+        sender_thread: threading.Thread | None = None
         try:
             sock.sendall(request)
+            if delayed_chunks:
+                def send_delayed_chunks() -> None:
+                    for chunk in delayed_chunks:
+                        time.sleep(chunk_delay)
+                        try:
+                            sock.sendall(chunk)
+                        except OSError:
+                            break
+
+                sender_thread = threading.Thread(target=send_delayed_chunks, daemon=True)
+                sender_thread.start()
             if shutdown_write:
                 sock.shutdown(socket.SHUT_WR)
             chunks: list[bytes] = []
@@ -97,6 +112,8 @@ class WebServiceTests(unittest.TestCase):
                     break
         finally:
             sock.close()
+            if sender_thread is not None:
+                sender_thread.join(timeout=1)
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
@@ -178,7 +195,8 @@ class WebServiceTests(unittest.TestCase):
             b"POST /api/accounts HTTP/1.1\r\n"
             b"Host: 127.0.0.1\r\n"
             b"Content-Length: 1048577\r\n"
-            b"Connection: close\r\n\r\n"
+            b"\r\n",
+            expect_eof=True,
         )
 
         self.assert_json_error(response, 413)
@@ -192,6 +210,21 @@ class WebServiceTests(unittest.TestCase):
             b"{",
             read_timeout=0.05,
             expect_eof=True,
+        )
+
+        self.assert_json_error(response, 408)
+
+    def test_post_body_timeout_is_a_total_deadline(self) -> None:
+        response = self.request_raw_json(
+            b"POST /api/accounts HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            b"Content-Length: 7\r\n"
+            b"\r\n"
+            b"{",
+            read_timeout=0.1,
+            expect_eof=True,
+            delayed_chunks=(b'"', b"a", b'"', b":", b"1", b"}"),
+            chunk_delay=0.06,
         )
 
         self.assert_json_error(response, 408)
