@@ -469,23 +469,44 @@ def _iter_fetch_messages(
     *,
     is_partial: bool = False,
 ) -> Iterable[tuple[str, bytes, bool]]:
+    pending_item: tuple[object, ...] | None = None
+    trailer_metadata: list[object] = []
     for item in data:
-        if not isinstance(item, tuple):
+        if isinstance(item, tuple):
+            if pending_item is not None:
+                yield _parse_fetch_item(
+                    pending_item,
+                    trailer_metadata=trailer_metadata,
+                    is_partial=is_partial,
+                )
+            pending_item = item
+            trailer_metadata = []
             continue
-        yield _parse_fetch_item(item, is_partial=is_partial)
+        if pending_item is not None:
+            trailer_metadata.append(item)
+    if pending_item is not None:
+        yield _parse_fetch_item(
+            pending_item,
+            trailer_metadata=trailer_metadata,
+            is_partial=is_partial,
+        )
 
 
 def _parse_fetch_item(
     item: tuple[object, ...],
     *,
+    trailer_metadata: Iterable[object] = (),
     is_partial: bool = False,
 ) -> tuple[str, bytes, bool]:
     if len(item) < 2 or not isinstance(item[1], bytes):
         raise ImapReceiveError("IMAP FETCH response item did not include message bytes")
 
-    metadata_bytes = _metadata_bytes(item[0])
-    if metadata_bytes is None:
-        metadata_bytes = b""
+    metadata_parts = []
+    for value in (item[0], *trailer_metadata):
+        metadata_bytes = _metadata_bytes(value)
+        if metadata_bytes is not None:
+            metadata_parts.append(metadata_bytes)
+    metadata_bytes = b" ".join(metadata_parts)
     match = FETCH_UID_RE.search(metadata_bytes)
     if match is None:
         raise ImapReceiveError("IMAP FETCH response item did not include UID")

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from mail_receiver.accounts import Account
 from mail_receiver.imap_client import (
+    _iter_fetch_messages,
     _parse_fetch_item,
     build_xoauth2_string,
     check_account,
@@ -40,6 +41,24 @@ class ImapClientTests(unittest.TestCase):
         self.assertEqual(uid, "42")
         self.assertEqual(raw_message, b"abc")
         self.assertFalse(raw_message_complete)
+
+    def test_fetch_literals_use_only_their_contiguous_trailer_metadata(self) -> None:
+        data = [
+            (b"1 (BODY[]<0> {5}", b"abcde"),
+            b" UID 42 RFC822.SIZE 5)",
+            (b"2 (BODY[]<0> {3}", b"xyz"),
+            b" UID 43 RFC822.SIZE 10)",
+        ]
+
+        payloads = list(_iter_fetch_messages(data, is_partial=True))
+
+        self.assertEqual(
+            payloads,
+            [
+                ("42", b"abcde", True),
+                ("43", b"xyz", False),
+            ],
+        )
 
     def test_email_record_from_message_extracts_headers_and_body(self) -> None:
         raw = (
