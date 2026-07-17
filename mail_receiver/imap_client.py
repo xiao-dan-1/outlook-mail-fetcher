@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email import policy
@@ -460,7 +461,54 @@ def _select_mailbox(
     client: imaplib.IMAP4_SSL,
     mailbox: str,
 ) -> tuple[str, list[object]]:
-    return _imap_operation(f"select mailbox {mailbox!r}", lambda: client.select(mailbox, readonly=True))
+    for forbidden_character, character_name in (
+        ("\r", "CR"),
+        ("\n", "LF"),
+        ("\x00", "NUL"),
+    ):
+        if forbidden_character in mailbox:
+            raise ImapReceiveError(
+                f"mailbox {mailbox!r} contains forbidden {character_name} character"
+            )
+    try:
+        encoded_mailbox = _encode_mailbox_modified_utf7(mailbox)
+    except UnicodeEncodeError as exc:
+        raise ImapReceiveError(
+            f"mailbox {mailbox!r} contains an unpaired Unicode surrogate"
+        ) from exc
+    escaped_mailbox = encoded_mailbox.replace("\\", "\\\\").replace('"', '\\"')
+    wire_mailbox = f'"{escaped_mailbox}"'.encode("ascii")
+    return _imap_operation(
+        f"select mailbox {mailbox!r}",
+        lambda: client.select(wire_mailbox, readonly=True),
+    )
+
+
+def _encode_mailbox_modified_utf7(mailbox: str) -> str:
+    encoded_parts: list[str] = []
+    shifted_chars: list[str] = []
+
+    def flush_shifted_chars() -> None:
+        if not shifted_chars:
+            return
+        utf16_bytes = "".join(shifted_chars).encode("utf-16-be")
+        modified_base64 = (
+            base64.b64encode(utf16_bytes)
+            .decode("ascii")
+            .rstrip("=")
+            .replace("/", ",")
+        )
+        encoded_parts.append(f"&{modified_base64}-")
+        shifted_chars.clear()
+
+    for character in mailbox:
+        if " " <= character <= "~":
+            flush_shifted_chars()
+            encoded_parts.append("&-" if character == "&" else character)
+        else:
+            shifted_chars.append(character)
+    flush_shifted_chars()
+    return "".join(encoded_parts)
 
 
 def _imap_operation(description: str, operation: Callable[[], T]) -> T:

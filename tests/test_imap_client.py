@@ -288,7 +288,7 @@ class InstrumentedIMAP:
         self.commands.append(("AUTHENTICATE", mechanism, payload))
         return "OK", [b""]
 
-    def select(self, mailbox: str, readonly: bool = False) -> tuple[str, list[bytes]]:
+    def select(self, mailbox: bytes, readonly: bool = False) -> tuple[str, list[bytes]]:
         self.commands.append(("SELECT", mailbox, readonly))
         if self.select_error is not None:
             raise self.select_error
@@ -359,6 +359,161 @@ class InstrumentedSocket:
 
 
 class FetchMessagesInstrumentedTests(unittest.TestCase):
+    def test_fetch_messages_selects_ascii_mailbox_as_quoted_bytes(self) -> None:
+        InstrumentedIMAP.reset(count=0)
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            fetch_messages(_account(), mailbox="INBOX", limit=1)
+
+        self.assertIn(
+            ("SELECT", b'"INBOX"', True),
+            InstrumentedIMAP.instances[0].commands,
+        )
+
+    def test_fetch_messages_encodes_literal_ampersand_in_mailbox(self) -> None:
+        InstrumentedIMAP.reset(count=0)
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            fetch_messages(_account(), mailbox="A&B", limit=1)
+
+        self.assertIn(
+            ("SELECT", b'"A&-B"', True),
+            InstrumentedIMAP.instances[0].commands,
+        )
+
+    def test_fetch_messages_encodes_modified_utf7_mailbox_vectors(self) -> None:
+        vectors = {
+            "台北": b'"&U,BTFw-"',
+            "日本語": b'"&ZeVnLIqe-"',
+            "~peter/mail/台北/日本語": b'"~peter/mail/&U,BTFw-/&ZeVnLIqe-"',
+            "台北日本語": b'"&U,BTF2XlZyyKng-"',
+            "Emoji 😀": b'"Emoji &2D3eAA-"',
+            "é": b'"&AOk-"',
+            "e\N{COMBINING ACUTE ACCENT}": b'"e&AwE-"',
+            "&U,BTFw-": b'"&-U,BTFw-"',
+        }
+
+        for mailbox, expected_wire_mailbox in vectors.items():
+            with self.subTest(mailbox=mailbox):
+                InstrumentedIMAP.reset(count=0)
+                with patch(
+                    "mail_receiver.imap_client.refresh_access_token",
+                    return_value=SimpleNamespace(access_token="access-token"),
+                ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+                    fetch_messages(_account(), mailbox=mailbox, limit=1)
+
+                self.assertIn(
+                    ("SELECT", expected_wire_mailbox, True),
+                    InstrumentedIMAP.instances[0].commands,
+                )
+
+    def test_fetch_messages_escapes_quoted_string_mailbox_characters(self) -> None:
+        InstrumentedIMAP.reset(count=0)
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            fetch_messages(_account(), mailbox='Shared "Team"\\Inbox', limit=1)
+
+        self.assertIn(
+            ("SELECT", b'"Shared \\"Team\\"\\\\Inbox"', True),
+            InstrumentedIMAP.instances[0].commands,
+        )
+
+    def test_fetch_messages_rejects_command_frame_characters_before_select(self) -> None:
+        invalid_mailboxes = {
+            "CR": "Inbox\rInjected",
+            "LF": "Inbox\nInjected",
+            "NUL": "Inbox\x00Injected",
+        }
+
+        for character_name, mailbox in invalid_mailboxes.items():
+            with self.subTest(character_name=character_name):
+                InstrumentedIMAP.reset(count=0)
+                with patch(
+                    "mail_receiver.imap_client.refresh_access_token",
+                    return_value=SimpleNamespace(access_token="access-token"),
+                ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+                    with self.assertRaises(ImapReceiveError) as raised:
+                        fetch_messages(_account(), mailbox=mailbox, limit=1)
+
+                self.assertIn(character_name, str(raised.exception))
+                self.assertIn(repr(mailbox), str(raised.exception))
+                self.assertFalse(
+                    any(command[0] == "SELECT" for command in InstrumentedIMAP.instances[0].commands)
+                )
+
+    def test_fetch_messages_rejects_unpaired_surrogate_before_select(self) -> None:
+        mailbox = "Inbox\ud800"
+        InstrumentedIMAP.reset(count=0)
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            with self.assertRaises(ImapReceiveError) as raised:
+                fetch_messages(_account(), mailbox=mailbox, limit=1)
+
+        self.assertIn("surrogate", str(raised.exception).lower())
+        self.assertIn(repr(mailbox), str(raised.exception))
+        self.assertFalse(
+            any(command[0] == "SELECT" for command in InstrumentedIMAP.instances[0].commands)
+        )
+
+    def test_fetch_messages_preserves_logical_unicode_mailbox_on_records(self) -> None:
+        mailbox = "收件箱"
+        InstrumentedIMAP.reset(count=1)
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            records = fetch_messages(_account(), mailbox=mailbox, limit=1)
+
+        self.assertEqual([record.mailbox for record in records], [mailbox])
+        self.assertIn(
+            ("SELECT", b'"&ZTZO9nux-"', True),
+            InstrumentedIMAP.instances[0].commands,
+        )
+
+    def test_check_account_preserves_logical_unicode_mailbox_on_result(self) -> None:
+        mailbox = "收件箱"
+        InstrumentedIMAP.reset(count=7)
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            result = check_account(_account(), mailbox=mailbox)
+
+        self.assertEqual(result.mailbox, mailbox)
+        self.assertEqual(result.message_count, 7)
+        self.assertIn(
+            ("SELECT", b'"&ZTZO9nux-"', True),
+            InstrumentedIMAP.instances[0].commands,
+        )
+
+    def test_select_failure_keeps_logical_unicode_mailbox_in_error(self) -> None:
+        mailbox = "收件箱"
+        InstrumentedIMAP.reset(count=0, select_status="NO")
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            with self.assertRaises(ImapReceiveError) as raised:
+                fetch_messages(_account(), mailbox=mailbox, limit=1)
+
+        self.assertIn(repr(mailbox), str(raised.exception))
+        self.assertNotIn("&ZTZO9nux-", str(raised.exception))
+
     def test_fetch_messages_sorts_uid_search_results_before_taking_last_uids(self) -> None:
         InstrumentedIMAP.reset(count=0)
         InstrumentedIMAP.messages = [
@@ -614,7 +769,7 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         client = InstrumentedIMAP.instances[0]
         self.assertEqual([record.uid for record in records], ["999", "1000"])
         self.assertTrue(all(record.raw_message_complete for record in records))
-        self.assertIn(("SELECT", "INBOX", True), client.commands)
+        self.assertIn(("SELECT", b'"INBOX"', True), client.commands)
         self.assertIn(("UID", "SEARCH", None, "ALL"), client.commands)
         self.assertIn(("UID", "FETCH", "999,1000", "(UID BODY.PEEK[])"), client.commands)
         self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "SEARCH")), 1)
@@ -716,7 +871,7 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         self.assertEqual(records, [])
         self.assertEqual(client.commands, [
             ("AUTHENTICATE", "XOAUTH2", b"user=user@outlook.com\x01auth=Bearer access-token\x01\x01"),
-            ("SELECT", "INBOX", True),
+            ("SELECT", b'"INBOX"', True),
             ("UID", "SEARCH", None, "ALL"),
         ])
 
