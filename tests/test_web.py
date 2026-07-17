@@ -255,6 +255,71 @@ class WebServiceTests(unittest.TestCase):
 
         self.assert_json_error(response, 404)
 
+    def test_selected_account_missing_returns_json_not_found(self) -> None:
+        account_text = "user@outlook.com----secret----client----refresh-token"
+        for path, extra_payload in (
+            ("/api/check", {}),
+            ("/api/fetch", {"mock": True}),
+        ):
+            with self.subTest(path=path):
+                response = self.request_json(
+                    "POST",
+                    path,
+                    body=json.dumps(
+                        {
+                            "account_text": account_text,
+                            "account": "missing@outlook.com",
+                            **extra_payload,
+                        }
+                    ).encode("utf-8"),
+                )
+
+                self.assert_json_error(response, 404)
+                self.assertIn("account not found", response[2]["error"])
+
+    def test_missing_account_file_returns_json_not_found(self) -> None:
+        with TemporaryDirectory() as directory:
+            missing_file = Path(directory) / "missing.txt"
+            encoded_file = str(missing_file).replace("\\", "/")
+            requests = (
+                ("GET", f"/api/accounts?account_file={encoded_file}", b""),
+                (
+                    "POST",
+                    "/api/accounts",
+                    json.dumps({"account_file": str(missing_file)}).encode("utf-8"),
+                ),
+                (
+                    "POST",
+                    "/api/check",
+                    json.dumps({"account_file": str(missing_file)}).encode("utf-8"),
+                ),
+                (
+                    "POST",
+                    "/api/fetch",
+                    json.dumps({"account_file": str(missing_file), "mock": True}).encode(
+                        "utf-8"
+                    ),
+                ),
+            )
+
+            for method, path, body in requests:
+                with self.subTest(method=method, path=path):
+                    response = self.request_json(method, path, body=body)
+
+                    self.assert_json_error(response, 404)
+                    self.assertIn("missing.txt", response[2]["error"])
+
+    def test_unexpected_callback_key_error_is_logged_and_returns_json_500(self) -> None:
+        with self.assertLogs("mail_receiver.web", level="ERROR") as logs, patch(
+            "mail_receiver.web.inspect_input_accounts_data",
+            side_effect=KeyError("unexpected-key"),
+        ):
+            response = self.request_json("POST", "/api/accounts", body=b"{}")
+
+        self.assert_json_error(response, 500)
+        self.assertIn("unexpected-key", response[2]["error"])
+        self.assertTrue(any("request failed" in entry for entry in logs.output))
+
     def test_post_empty_body_remains_an_empty_object(self) -> None:
         response = self.request_json("POST", "/api/accounts")
 

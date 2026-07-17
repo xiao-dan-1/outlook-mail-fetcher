@@ -51,6 +51,10 @@ class RequestBodyTimeoutError(RuntimeError):
     pass
 
 
+class NotFoundError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class WebConfig:
     account_file: Path | None = None
@@ -264,7 +268,7 @@ def filter_accounts(accounts: list[Account], selected_account: str) -> list[Acco
         if account.email.lower() == selected_account.lower()
     ]
     if not selected:
-        raise ValueError(f"account not found: {selected_account}")
+        raise NotFoundError(f"account not found: {selected_account}")
     return selected
 
 
@@ -472,12 +476,12 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
                 self._send_error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, str(exc))
             except RequestBodyTimeoutError as exc:
                 self._send_error(HTTPStatus.REQUEST_TIMEOUT, str(exc))
+            except (NotFoundError, FileNotFoundError) as exc:
+                self._send_error(HTTPStatus.NOT_FOUND, str(exc))
             except AccountFormatError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
-            except KeyError as exc:
-                self._send_error(HTTPStatus.NOT_FOUND, str(exc).strip("'"))
             except Exception as exc:
                 LOGGER.exception("request failed")
                 self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
