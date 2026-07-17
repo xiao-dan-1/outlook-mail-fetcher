@@ -239,7 +239,7 @@ class StaticUiTests(unittest.TestCase):
         js = STATIC_JS.read_text(encoding="utf-8")
 
         self.assertIn(
-            "const { createOperationGate, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertEqual(js.count("const mailOperationGate = createOperationGate();"), 1)
@@ -295,6 +295,66 @@ class StaticUiTests(unittest.TestCase):
                 )
                 self.assertLess(body.index("setBusy(false);"), body.index("syncSessionActions();"))
 
+    def test_fetch_transport_failures_replace_busy_status_and_preserve_retry_rows(self) -> None:
+        js = STATIC_JS.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            js,
+        )
+        self.assertIn('request: "请求"', js)
+
+        helper_match = re.search(
+            r"function recordRequestFailure\(email, error\) \{(?P<body>.*?)\n\}",
+            js,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(helper_match)
+        helper_body = helper_match.group("body")
+        helper_contract = [
+            "const failure = createRequestFailureState(email, error);",
+            "state.accountStatus.set(email, failure.status);",
+            "const failedByEmail = new Map(state.failedRows.map((row) => [row.email, row]));",
+            "failedByEmail.set(email, failure.row);",
+            "state.failedRows = Array.from(failedByEmail.values());",
+            "renderAccounts(state.accounts);",
+        ]
+        for contract in helper_contract:
+            with self.subTest(helper_contract=contract):
+                self.assertIn(contract, helper_body)
+        for earlier, later in zip(helper_contract, helper_contract[1:]):
+            self.assertLess(helper_body.index(earlier), helper_body.index(later))
+
+        for function_name in ["fetchMail", "retryFailedAccounts"]:
+            with self.subTest(function_name=function_name):
+                function_match = re.search(
+                    rf"async function {function_name}\(\) \{{(?P<body>.*?)\n\}}",
+                    js,
+                    re.DOTALL,
+                )
+                self.assertIsNotNone(function_match)
+                body = function_match.group("body")
+                self.assertEqual(body.count('let pendingEmail = "";'), 1)
+                self.assertRegex(
+                    body,
+                    r"pendingEmail = account\.email;\s+"
+                    r"const accountData = await fetchOneAccount\(account\);\s+"
+                    r"if \(!sessionRequests\.isCurrent\(operationRevision\)\) \{\s+"
+                    r"return;\s+"
+                    r"\}\s+"
+                    r"pendingEmail = \"\";\s+"
+                    r"renderFetchResult\(accountData\);",
+                )
+                stale_check = "if (requestIsStale(operationRevision, error))"
+                failure_record = (
+                    "if (pendingEmail) {\n"
+                    "      recordRequestFailure(pendingEmail, error);\n"
+                    "    }"
+                )
+                self.assertIn(failure_record, body)
+                self.assertLess(body.index(stale_check), body.index(failure_record))
+                self.assertEqual(body.count("recordRequestFailure(pendingEmail, error);"), 1)
+
     def test_account_edits_cancel_and_isolate_stale_requests(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
 
@@ -308,7 +368,7 @@ class StaticUiTests(unittest.TestCase):
             return function_match.group("body")
 
         self.assertIn(
-            "const { createOperationGate, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertIn("const sessionRequests = createSessionCoordinator();", js)
@@ -2898,7 +2958,7 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn(app_script, html)
         self.assertLess(html.index(logic_script), html.index(app_script))
         self.assertIn(
-            "const { createOperationGate, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertIn("selectedMessageKey: null", js)

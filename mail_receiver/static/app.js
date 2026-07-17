@@ -1,4 +1,4 @@
-const { createOperationGate, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;
+const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;
 
 const state = {
   config: null,
@@ -452,6 +452,15 @@ async function api(path, options = {}) {
 
 function requestIsStale(revision, error) {
   return !sessionRequests.isCurrent(revision) || error?.name === "AbortError";
+}
+
+function recordRequestFailure(email, error) {
+  const failure = createRequestFailureState(email, error);
+  state.accountStatus.set(email, failure.status);
+  const failedByEmail = new Map(state.failedRows.map((row) => [row.email, row]));
+  failedByEmail.set(email, failure.row);
+  state.failedRows = Array.from(failedByEmail.values());
+  renderAccounts(state.accounts);
 }
 
 function failureInsight(message, stage = "") {
@@ -1038,6 +1047,7 @@ async function retryFailedAccounts() {
     return;
   }
   const operationRevision = sessionRequests.currentRevision();
+  let pendingEmail = "";
   try {
     const parsed = await ensureParsed();
     if (!parsed || !sessionRequests.isCurrent(operationRevision)) {
@@ -1053,10 +1063,12 @@ async function retryFailedAccounts() {
       state.accountStatus.set(email, { kind: "busy" });
       renderAccounts(state.accounts);
       setStatus(`正在重试 ${email}`, "busy");
+      pendingEmail = account.email;
       const accountData = await fetchOneAccount(account);
       if (!sessionRequests.isCurrent(operationRevision)) {
         return;
       }
+      pendingEmail = "";
       renderFetchResult(accountData);
       summary.fetched += accountData.fetched;
       summary.failed += accountData.failed;
@@ -1065,6 +1077,9 @@ async function retryFailedAccounts() {
   } catch (error) {
     if (requestIsStale(operationRevision, error)) {
       return;
+    }
+    if (pendingEmail) {
+      recordRequestFailure(pendingEmail, error);
     }
     addLog(`重试失败：${error.message}`, "fail");
     setStatus("重试失败", "error");
@@ -1372,6 +1387,7 @@ function resetSessionResults() {
 
 function statusStageLabel(stage) {
   const labels = {
+    request: "请求",
     oauth: "OAuth",
     fetch: "拉取",
     auth: "认证",
@@ -1906,6 +1922,7 @@ async function fetchMail() {
     return;
   }
   const operationRevision = sessionRequests.currentRevision();
+  let pendingEmail = "";
   try {
     const parsed = await ensureParsed();
     if (!parsed || !sessionRequests.isCurrent(operationRevision)) {
@@ -1918,10 +1935,12 @@ async function fetchMail() {
       state.accountStatus.set(account.email, { kind: "busy" });
       renderAccounts(state.accounts);
       setStatus(`正在拉取 ${account.email}`, "busy");
+      pendingEmail = account.email;
       const accountData = await fetchOneAccount(account);
       if (!sessionRequests.isCurrent(operationRevision)) {
         return;
       }
+      pendingEmail = "";
       renderFetchResult(accountData);
       summary.fetched += accountData.fetched;
       summary.failed += accountData.failed;
@@ -1930,6 +1949,9 @@ async function fetchMail() {
   } catch (error) {
     if (requestIsStale(operationRevision, error)) {
       return;
+    }
+    if (pendingEmail) {
+      recordRequestFailure(pendingEmail, error);
     }
     addLog(error.message, "fail");
     const results = visibleMessages();

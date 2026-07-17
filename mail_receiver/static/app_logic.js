@@ -79,6 +79,37 @@
     };
   }
 
+  function createRequestFailureState(email, error) {
+    var errorMessage = error && error.message !== undefined
+      ? String(error.message)
+      : String(error ?? '');
+
+    return {
+      row: {
+        email: email,
+        ok: false,
+        stage: 'request',
+        fetched: 0,
+        elapsed_ms: 0,
+        error: errorMessage,
+        timings: {},
+        raw_bytes: 0,
+        downloaded_bytes: 0,
+        message_count: 0,
+      },
+      status: {
+        kind: 'fail',
+        stage: 'request',
+        elapsed_ms: 0,
+        error: errorMessage,
+        timings: {},
+        raw_bytes: 0,
+        downloaded_bytes: 0,
+        message_count: 0,
+      },
+    };
+  }
+
   function messageKey(message) {
     var safeMessage = message || {};
     var accountEmail = String(safeMessage.account_email ?? '').toLowerCase();
@@ -104,6 +135,7 @@
 
   var api = {
     createOperationGate: createOperationGate,
+    createRequestFailureState: createRequestFailureState,
     createSessionCoordinator: createSessionCoordinator,
     messageKey: messageKey,
     findMessageByKey: findMessageByKey,

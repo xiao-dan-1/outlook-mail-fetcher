@@ -3,10 +3,43 @@ const assert = require('node:assert/strict');
 
 const {
   createOperationGate,
+  createRequestFailureState,
   createSessionCoordinator,
   messageKey,
   findMessageByKey,
 } = require('../mail_receiver/static/app_logic.js');
+
+test('creates a complete request failure row and account status', () => {
+  const failure = createRequestFailureState(
+    'transport@outlook.com',
+    new Error('HTTP 503 upstream unavailable'),
+  );
+
+  assert.deepEqual(failure, {
+    row: {
+      email: 'transport@outlook.com',
+      ok: false,
+      stage: 'request',
+      fetched: 0,
+      elapsed_ms: 0,
+      error: 'HTTP 503 upstream unavailable',
+      timings: {},
+      raw_bytes: 0,
+      downloaded_bytes: 0,
+      message_count: 0,
+    },
+    status: {
+      kind: 'fail',
+      stage: 'request',
+      elapsed_ms: 0,
+      error: 'HTTP 503 upstream unavailable',
+      timings: {},
+      raw_bytes: 0,
+      downloaded_bytes: 0,
+      message_count: 0,
+    },
+  });
+});
 
 test('operation gate rejects concurrent starts until its owner finishes', () => {
   const gate = createOperationGate();
