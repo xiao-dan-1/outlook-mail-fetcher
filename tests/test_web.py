@@ -509,6 +509,51 @@ class WebServiceTests(unittest.TestCase):
             self.assertEqual(fetch_result["failed"], 0)
             self.assertEqual(fetch_result["messages"], [])
 
+    def test_fetch_rejects_limit_outside_server_range_before_work(self) -> None:
+        account_text = "user@outlook.com----secret----client----refresh-token"
+        for limit in (-1, 101, 1_000_000_000):
+            with self.subTest(limit=limit), patch(
+                "mail_receiver.web.mock_messages"
+            ) as mock_fetch, patch("mail_receiver.web.fetch_messages") as real_fetch:
+                with self.assertRaisesRegex(ValueError, "limit"):
+                    fetch_data(
+                        {"account_text": account_text, "mock": True, "limit": limit},
+                        WebConfig(),
+                    )
+
+                mock_fetch.assert_not_called()
+                real_fetch.assert_not_called()
+
+    def test_fetch_accepts_server_limit_boundary(self) -> None:
+        account_text = "user@outlook.com----secret----client----refresh-token"
+        with patch("mail_receiver.web.mock_messages", return_value=[]) as mock_fetch:
+            result = fetch_data(
+                {"account_text": account_text, "mock": True, "limit": 100},
+                WebConfig(),
+            )
+
+        self.assertEqual(result["failed"], 0)
+        self.assertEqual(mock_fetch.call_args.kwargs["limit"], 100)
+
+    def test_http_fetch_rejects_limit_outside_server_range(self) -> None:
+        account_text = "user@outlook.com----secret----client----refresh-token"
+        for limit in (-1, 101, 1_000_000_000):
+            with self.subTest(limit=limit), patch(
+                "mail_receiver.web.mock_messages"
+            ) as mock_fetch, patch("mail_receiver.web.fetch_messages") as real_fetch:
+                response = self.request_json(
+                    "POST",
+                    "/api/fetch",
+                    body=json.dumps(
+                        {"account_text": account_text, "mock": True, "limit": limit}
+                    ).encode("utf-8"),
+                )
+
+                self.assert_json_error(response, 400)
+                self.assertIn("limit", response[2]["error"])
+                mock_fetch.assert_not_called()
+                real_fetch.assert_not_called()
+
     def test_mock_fetch_can_limit_to_selected_account(self) -> None:
         with TemporaryDirectory() as directory:
             account_file = Path(directory) / "accounts.txt"

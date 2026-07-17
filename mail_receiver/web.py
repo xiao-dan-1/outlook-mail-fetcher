@@ -36,6 +36,7 @@ STATIC_TYPES = {
     ".js": "application/javascript; charset=utf-8",
 }
 WEB_PREVIEW_MAX_BYTES = 16 * 1024
+WEB_MAX_FETCH_LIMIT = 100
 WEB_DEFAULT_IMAP_TIMEOUT = 8
 WEB_DEFAULT_TOKEN_TIMEOUT = 8
 WEB_MAX_JSON_BODY_BYTES = 1024 * 1024
@@ -140,6 +141,8 @@ def check_accounts_data(payload: dict[str, Any], config: WebConfig) -> dict[str,
 def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
     mailbox = str(payload.get("mailbox") or "INBOX")
     limit = payload_int(payload, "limit", 20)
+    if not 0 <= limit <= WEB_MAX_FETCH_LIMIT:
+        raise ValueError(f"limit must be between 0 and {WEB_MAX_FETCH_LIMIT}")
     selected_account = str(payload.get("account") or "").strip()
     use_mock = payload_bool(payload, "mock", False)
     stop_on_error = payload_bool(payload, "stop_on_error", False)

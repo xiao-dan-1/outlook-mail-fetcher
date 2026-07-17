@@ -50,7 +50,7 @@ email----password----client_id----refresh_token
 | `account_file` | string | 否 | 启动时的 `--account-file` | 账号文件路径 |
 | `account` | string | 否 | 无 | 只处理指定邮箱 |
 | `mailbox` | string | 否 | `INBOX` | IMAP 邮箱目录 |
-| `limit` | integer | 否 | fetch 为 `20`，前端默认 `1` | 每个账号最多拉取的邮件数 |
+| `limit` | integer | 否 | fetch 为 `20`，前端默认 `1` | 每个账号最多拉取的邮件数，范围 `0..100` |
 | `imap_host` | string | 否 | `outlook.office365.com` | IMAP 主机 |
 | `imap_port` | integer | 否 | `993` | IMAP SSL 端口 |
 | `imap_timeout` | integer | 否 | `8` | IMAP 超时时间，秒 |
