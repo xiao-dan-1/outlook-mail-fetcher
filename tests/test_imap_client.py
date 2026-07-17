@@ -399,6 +399,26 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         self.assertEqual([record.uid for record in records], ["20", "42"])
         self.assertIn(("UID", "FETCH", "20,42", "(UID BODY.PEEK[])"), client.commands)
 
+    def test_fetch_messages_deduplicates_uid_search_results_by_numeric_value(self) -> None:
+        InstrumentedIMAP.reset(count=0)
+        InstrumentedIMAP.messages = [
+            ("2", _raw_message("2")),
+            ("7", _raw_message("7")),
+            ("20", _raw_message("20")),
+            ("42", _raw_message("42")),
+        ]
+        InstrumentedIMAP.search_result = b"2 7 20 42 042"
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            records = fetch_messages(_account(), limit=2)
+
+        client = InstrumentedIMAP.instances[0]
+        self.assertEqual([record.uid for record in records], ["20", "42"])
+        self.assertIn(("UID", "FETCH", "20,42", "(UID BODY.PEEK[])"), client.commands)
+
     def test_fetch_messages_uses_one_uid_fetch_for_last_non_contiguous_uids(self) -> None:
         InstrumentedIMAP.reset(count=0)
         InstrumentedIMAP.messages = [

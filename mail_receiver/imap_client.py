@@ -334,7 +334,7 @@ def _search_message_uids(client: imaplib.IMAP4_SSL) -> list[str]:
     if status != "OK":
         raise ImapReceiveError(f"failed to search message UIDs: {status}")
 
-    uids: list[str] = []
+    uid_values: set[int] = set()
     for item in data or []:
         item_bytes = _metadata_bytes(item)
         if item_bytes is None:
@@ -342,8 +342,8 @@ def _search_message_uids(client: imaplib.IMAP4_SSL) -> list[str]:
         for uid in item_bytes.split():
             if not uid.isdigit():
                 raise ImapReceiveError("IMAP UID SEARCH response included an invalid UID")
-            uids.append(uid.decode("ascii"))
-    return sorted(set(uids), key=int)
+            uid_values.add(int(uid))
+    return [str(uid) for uid in sorted(uid_values)]
 
 
 def _fetch_message_payloads_by_uid(
