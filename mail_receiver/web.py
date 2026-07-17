@@ -220,8 +220,9 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
             if stop_on_error:
                 break
 
+    account_file = resolve_account_file(payload, config)
     return {
-        "account_file": str(payload.get("account_file") or config.account_file),
+        "account_file": str(account_file) if account_file else None,
         "accounts": len(accounts),
         "fetched": total_fetched,
         "failed": failed,

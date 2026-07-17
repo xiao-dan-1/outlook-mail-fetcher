@@ -509,6 +509,18 @@ class WebServiceTests(unittest.TestCase):
             self.assertEqual(fetch_result["failed"], 0)
             self.assertEqual(fetch_result["messages"], [])
 
+    def test_inline_fetch_returns_json_null_account_file(self) -> None:
+        result = fetch_data(
+            {
+                "account_text": "user@outlook.com----secret----client----refresh-token",
+                "mock": True,
+                "limit": 0,
+            },
+            WebConfig(),
+        )
+
+        self.assertIsNone(result["account_file"])
+
     def test_fetch_rejects_limit_outside_server_range_before_work(self) -> None:
         account_text = "user@outlook.com----secret----client----refresh-token"
         for limit in (-1, 101, 1_000_000_000):
