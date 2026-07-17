@@ -5,6 +5,7 @@ from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 import io
 import json
+import socket
 import threading
 from tempfile import TemporaryDirectory
 import unittest
@@ -53,6 +54,61 @@ class WebServiceTests(unittest.TestCase):
         self.assertEqual(response_status, status)
         self.assertEqual(content_type, "application/json; charset=utf-8")
         self.assertIsInstance(body["error"], str)
+
+    def request_raw_json(
+        self,
+        request: bytes,
+        *,
+        max_body_bytes: int = 1024 * 1024,
+        read_timeout: float = 0.1,
+        shutdown_write: bool = False,
+        client_timeout: float = 1.0,
+    ) -> tuple[int, str | None, dict]:
+        handler = create_handler(WebConfig())
+        handler.max_json_body_bytes = max_body_bytes
+        handler.request_read_timeout = read_timeout
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        sock = socket.create_connection(server.server_address, timeout=client_timeout)
+        sock.settimeout(client_timeout)
+        try:
+            sock.sendall(request)
+            if shutdown_write:
+                sock.shutdown(socket.SHUT_WR)
+            chunks: list[bytes] = []
+            while True:
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                response_bytes = b"".join(chunks)
+                if b"\r\n\r\n" not in response_bytes:
+                    continue
+                header_bytes, body = response_bytes.split(b"\r\n\r\n", 1)
+                content_length = 0
+                for line in header_bytes.split(b"\r\n")[1:]:
+                    if line.lower().startswith(b"content-length:"):
+                        content_length = int(line.split(b":", 1)[1].strip())
+                        break
+                if len(body) >= content_length:
+                    break
+        finally:
+            sock.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        response_bytes = b"".join(chunks)
+        self.assertIn(b"\r\n\r\n", response_bytes)
+        header_bytes, body = response_bytes.split(b"\r\n\r\n", 1)
+        status = int(header_bytes.split(b"\r\n", 1)[0].split()[1])
+        content_type = None
+        for line in header_bytes.split(b"\r\n")[1:]:
+            if line.lower().startswith(b"content-type:"):
+                content_type = line.split(b":", 1)[1].strip().decode("ascii")
+                break
+        return status, content_type, json.loads(body.decode("utf-8"))
 
     def test_post_invalid_json_returns_json_bad_request(self) -> None:
         response = self.request_json(
@@ -114,6 +170,56 @@ class WebServiceTests(unittest.TestCase):
 
         self.assert_json_error(response, 400)
         self.assertIn("请先", response[2]["error"])
+
+    def test_post_rejects_oversized_body_before_reading_it(self) -> None:
+        response = self.request_raw_json(
+            b"POST /api/accounts HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            b"Content-Length: 1048577\r\n"
+            b"Connection: close\r\n\r\n"
+        )
+
+        self.assert_json_error(response, 413)
+
+    def test_post_partial_body_times_out(self) -> None:
+        response = self.request_raw_json(
+            b"POST /api/accounts HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            b"Content-Length: 10\r\n"
+            b"Connection: close\r\n\r\n"
+            b"{",
+            read_timeout=0.05,
+        )
+
+        self.assert_json_error(response, 408)
+
+    def test_post_short_body_returns_bad_request(self) -> None:
+        response = self.request_raw_json(
+            b"POST /api/accounts HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            b"Content-Length: 10\r\n"
+            b"Connection: close\r\n\r\n"
+            b"{}",
+            shutdown_write=True,
+        )
+
+        self.assert_json_error(response, 400)
+        self.assertIn("incomplete", response[2]["error"].lower())
+
+    def test_post_accepts_body_at_configured_limit(self) -> None:
+        body = b'{"padding":"' + (b"x" * 46) + b'"}'
+        self.assertEqual(len(body), 60)
+        response = self.request_raw_json(
+            b"POST /api/accounts HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            b"Content-Length: 60\r\n"
+            b"Connection: close\r\n\r\n"
+            + body,
+            max_body_bytes=60,
+        )
+
+        self.assert_json_error(response, 400)
+        self.assertNotEqual(response[0], 413)
 
     def test_web_parser_does_not_default_to_order_account_file(self) -> None:
         args = build_parser().parse_args([])

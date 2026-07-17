@@ -5,6 +5,7 @@ import base64
 from dataclasses import dataclass
 import json
 import logging
+import socket
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -37,6 +38,16 @@ STATIC_TYPES = {
 WEB_PREVIEW_MAX_BYTES = 16 * 1024
 WEB_DEFAULT_IMAP_TIMEOUT = 8
 WEB_DEFAULT_TOKEN_TIMEOUT = 8
+WEB_MAX_JSON_BODY_BYTES = 1024 * 1024
+WEB_REQUEST_READ_TIMEOUT = 5.0
+
+
+class RequestBodyTooLargeError(RuntimeError):
+    pass
+
+
+class RequestBodyTimeoutError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -309,6 +320,8 @@ def email_record_to_dict(record: Any, *, next_id: int, include_raw: bool = False
 def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
     class ReceiverHandler(BaseHTTPRequestHandler):
         server_version = f"OutlookMailFetcher/{__version__}"
+        max_json_body_bytes = WEB_MAX_JSON_BODY_BYTES
+        request_read_timeout = WEB_REQUEST_READ_TIMEOUT
 
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -386,7 +399,25 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
                 length = int(raw_length)
             if length <= 0:
                 return {}
-            body = self.rfile.read(length)
+            if length > self.max_json_body_bytes:
+                self.close_connection = True
+                raise RequestBodyTooLargeError(
+                    f"JSON request body exceeds {self.max_json_body_bytes} bytes"
+                )
+            previous_timeout = self.connection.gettimeout()
+            try:
+                self.connection.settimeout(self.request_read_timeout)
+                try:
+                    body = self.rfile.read(length)
+                except (TimeoutError, socket.timeout) as exc:
+                    self.close_connection = True
+                    raise RequestBodyTimeoutError("JSON request body read timed out") from exc
+            finally:
+                self.connection.settimeout(previous_timeout)
+            if len(body) != length:
+                raise ValueError(
+                    f"incomplete JSON request body: expected {length} bytes, got {len(body)}"
+                )
             payload = json.loads(
                 body.decode("utf-8"),
                 parse_constant=self._reject_json_constant,
@@ -402,6 +433,10 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
         def _run_json(self, callback: Any) -> None:
             try:
                 self._send_json(callback())
+            except RequestBodyTooLargeError as exc:
+                self._send_error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, str(exc))
+            except RequestBodyTimeoutError as exc:
+                self._send_error(HTTPStatus.REQUEST_TIMEOUT, str(exc))
             except AccountFormatError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
             except ValueError as exc:
