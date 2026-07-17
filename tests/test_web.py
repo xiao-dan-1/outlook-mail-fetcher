@@ -2,6 +2,7 @@ import base64
 from pathlib import Path
 from contextlib import redirect_stdout
 from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
 import io
 import json
 import threading
@@ -24,6 +25,93 @@ from mail_receiver.web import (
 
 
 class WebServiceTests(unittest.TestCase):
+    def request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: bytes = b"",
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, str | None, dict]:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(WebConfig()))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        conn = HTTPConnection("127.0.0.1", server.server_address[1], timeout=2)
+        try:
+            conn.request(method, path, body=body, headers=headers or {})
+            response = conn.getresponse()
+            response_body = json.loads(response.read().decode("utf-8"))
+            return response.status, response.getheader("Content-Type"), response_body
+        finally:
+            conn.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def assert_json_error(self, response: tuple[int, str | None, dict], status: int) -> None:
+        response_status, content_type, body = response
+        self.assertEqual(response_status, status)
+        self.assertEqual(content_type, "application/json; charset=utf-8")
+        self.assertIsInstance(body["error"], str)
+
+    def test_post_invalid_json_returns_json_bad_request(self) -> None:
+        response = self.request_json(
+            "POST",
+            "/api/accounts",
+            body=b'{"account_text":',
+            headers={"Content-Type": "application/json"},
+        )
+
+        self.assert_json_error(response, 400)
+
+    def test_post_invalid_utf8_returns_json_bad_request(self) -> None:
+        response = self.request_json("POST", "/api/accounts", body=b"\xff")
+
+        self.assert_json_error(response, 400)
+
+    def test_post_invalid_content_length_returns_json_bad_request(self) -> None:
+        response = self.request_json(
+            "POST",
+            "/api/accounts",
+            body=b"{}",
+            headers={"Content-Length": "not-a-number"},
+        )
+
+        self.assert_json_error(response, 400)
+
+    def test_post_requires_top_level_json_object(self) -> None:
+        for body in (b"[]", b"null", b'"text"', b"42"):
+            with self.subTest(body=body):
+                response = self.request_json("POST", "/api/accounts", body=body)
+
+                self.assert_json_error(response, 400)
+                self.assertIn("object", response[2]["error"])
+
+    def test_post_rejects_non_finite_json_constants(self) -> None:
+        account_text = "user@outlook.com----secret----client----refresh-token"
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                body = json.dumps({"account_text": account_text})[:-1] + f', "value": {constant}}}'
+                response = self.request_json("POST", "/api/accounts", body=body.encode("utf-8"))
+
+                self.assert_json_error(response, 400)
+                self.assertIn(constant, response[2]["error"])
+
+    def test_unknown_post_route_returns_json_not_found_without_reading_body(self) -> None:
+        response = self.request_json(
+            "POST",
+            "/api/unknown",
+            headers={"Content-Length": "not-a-number"},
+        )
+
+        self.assert_json_error(response, 404)
+
+    def test_post_empty_body_remains_an_empty_object(self) -> None:
+        response = self.request_json("POST", "/api/accounts")
+
+        self.assert_json_error(response, 400)
+        self.assertIn("请先", response[2]["error"])
+
     def test_web_parser_does_not_default_to_order_account_file(self) -> None:
         args = build_parser().parse_args([])
 
@@ -82,8 +170,6 @@ class WebServiceTests(unittest.TestCase):
             inspect_input_accounts_data({}, WebConfig(account_file=None))
 
     def test_config_endpoint_uses_json_null_when_account_file_is_not_configured(self) -> None:
-        from http.server import ThreadingHTTPServer
-
         server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(WebConfig()))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()

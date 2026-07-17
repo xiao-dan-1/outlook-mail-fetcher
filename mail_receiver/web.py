@@ -345,17 +345,16 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
 
         def do_POST(self) -> None:
             parsed = urlparse(self.path)
-            payload = self._read_json()
-            if parsed.path == "/api/accounts":
-                self._run_json(lambda: inspect_input_accounts_data(payload, config))
+            routes = {
+                "/api/accounts": inspect_input_accounts_data,
+                "/api/check": check_accounts_data,
+                "/api/fetch": fetch_data,
+            }
+            callback = routes.get(parsed.path)
+            if callback is None:
+                self._send_error(HTTPStatus.NOT_FOUND, "not found")
                 return
-            if parsed.path == "/api/check":
-                self._run_json(lambda: check_accounts_data(payload, config))
-                return
-            if parsed.path == "/api/fetch":
-                self._run_json(lambda: fetch_data(payload, config))
-                return
-            self._send_error(HTTPStatus.NOT_FOUND, "not found")
+            self._run_json(lambda: callback(self._read_json(), config))
 
         def log_message(self, format: str, *args: Any) -> None:
             LOGGER.info("%s - %s", self.address_string(), format % args)
@@ -382,7 +381,17 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
             if length <= 0:
                 return {}
             body = self.rfile.read(length)
-            return json.loads(body.decode("utf-8"))
+            payload = json.loads(
+                body.decode("utf-8"),
+                parse_constant=self._reject_json_constant,
+            )
+            if not isinstance(payload, dict):
+                raise ValueError("JSON request body must be an object")
+            return payload
+
+        @staticmethod
+        def _reject_json_constant(value: str) -> None:
+            raise ValueError(f"invalid JSON constant: {value}")
 
         def _run_json(self, callback: Any) -> None:
             try:
