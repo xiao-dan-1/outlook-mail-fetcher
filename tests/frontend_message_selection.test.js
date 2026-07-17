@@ -2,10 +2,50 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  createOperationGate,
   createSessionCoordinator,
   messageKey,
   findMessageByKey,
 } = require('../mail_receiver/static/app_logic.js');
+
+test('operation gate rejects concurrent starts until its owner finishes', () => {
+  const gate = createOperationGate();
+
+  const owner = gate.tryStart();
+
+  assert.notEqual(owner, null);
+  assert.equal(gate.tryStart(), null);
+  assert.equal(gate.finish(owner), true);
+
+  const nextOwner = gate.tryStart();
+  assert.notEqual(nextOwner, null);
+  assert.notStrictEqual(nextOwner, owner);
+});
+
+test('operation gate only lets the active owner finish an operation', () => {
+  const gate = createOperationGate();
+  const owner = gate.tryStart();
+
+  assert.equal(gate.finish({}), false);
+  assert.equal(gate.tryStart(), null);
+  assert.equal(gate.finish(owner), true);
+  assert.equal(gate.finish(owner), false);
+});
+
+test('operation gate reset admits new work and isolates stale finally blocks', () => {
+  const gate = createOperationGate();
+  const staleOwner = gate.tryStart();
+
+  gate.reset();
+  const currentOwner = gate.tryStart();
+
+  assert.notEqual(currentOwner, null);
+  assert.notStrictEqual(currentOwner, staleOwner);
+  assert.equal(gate.finish(staleOwner), false);
+  assert.equal(gate.tryStart(), null);
+  assert.equal(gate.finish(currentOwner), true);
+  assert.notEqual(gate.tryStart(), null);
+});
 
 test('selects messages with the same API id by their stable UID identity', () => {
   const first = {

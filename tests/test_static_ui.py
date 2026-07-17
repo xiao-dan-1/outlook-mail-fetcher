@@ -235,8 +235,28 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("provider.identityPatterns?.length && !providerMatchesText(provider, text)", js)
         self.assertIn('identityPatterns: [/x\\.ai/i, /xai/i, /grok/i]', js)
 
-    def test_fetch_and_retry_completion_resync_session_actions_after_busy_state_clears(self) -> None:
+    def test_fetch_and_retry_share_an_owner_gate_for_busy_cleanup(self) -> None:
         js = STATIC_JS.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "const { createOperationGate, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            js,
+        )
+        self.assertEqual(js.count("const mailOperationGate = createOperationGate();"), 1)
+
+        fetch_match = re.search(r"async function fetchMail\(\) \{(?P<body>.*?)\n\}", js, re.DOTALL)
+        retry_match = re.search(r"async function retryFailedAccounts\(\) \{(?P<body>.*?)\n\}", js, re.DOTALL)
+        self.assertIsNotNone(fetch_match)
+        self.assertIsNotNone(retry_match)
+        gate_start = (
+            "const operationToken = mailOperationGate.tryStart();\n"
+            "  if (operationToken === null) {\n"
+            "    return;\n"
+            "  }"
+        )
+        self.assertTrue(fetch_match.group("body").strip().startswith(gate_start))
+        retry_body = retry_match.group("body")
+        self.assertLess(retry_body.index("if (!failedEmails.length)"), retry_body.index(gate_start))
 
         for function_name in ["fetchMail", "retryFailedAccounts"]:
             with self.subTest(function_name=function_name):
@@ -246,11 +266,33 @@ class StaticUiTests(unittest.TestCase):
                     re.DOTALL,
                 )
                 self.assertIsNotNone(function_match)
+                function_body = function_match.group("body")
+                self.assertEqual(function_body.count("mailOperationGate.tryStart()"), 1)
+                self.assertEqual(function_body.count("mailOperationGate.finish(operationToken)"), 1)
+                self.assertIn("const operationToken = mailOperationGate.tryStart();", function_body)
+                self.assertIn(
+                    "if (operationToken === null) {\n"
+                    "    return;\n"
+                    "  }",
+                    function_body,
+                )
+                self.assertLess(
+                    function_body.index("mailOperationGate.tryStart()"),
+                    function_body.index("const parsed = await ensureParsed();"),
+                )
                 finally_block = re.search(r"finally \{\n(?P<body>.*?)\n  \}", function_match.group("body"), re.DOTALL)
                 self.assertIsNotNone(finally_block)
                 body = finally_block.group("body")
+                self.assertIn(
+                    "mailOperationGate.finish(operationToken) && sessionRequests.isCurrent(operationRevision)",
+                    body,
+                )
                 self.assertIn("setBusy(false);", body)
                 self.assertIn("syncSessionActions();", body)
+                self.assertLess(
+                    body.index("mailOperationGate.finish(operationToken)"),
+                    body.index("sessionRequests.isCurrent(operationRevision)"),
+                )
                 self.assertLess(body.index("setBusy(false);"), body.index("syncSessionActions();"))
 
     def test_account_edits_cancel_and_isolate_stale_requests(self) -> None:
@@ -266,10 +308,11 @@ class StaticUiTests(unittest.TestCase):
             return function_match.group("body")
 
         self.assertIn(
-            "const { createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertIn("const sessionRequests = createSessionCoordinator();", js)
+        self.assertIn("const mailOperationGate = createOperationGate();", js)
 
         stale_match = re.search(
             r"function requestIsStale\(revision, error\) \{(?P<body>.*?)\n\}",
@@ -289,7 +332,11 @@ class StaticUiTests(unittest.TestCase):
         )
         self.assertIsNotNone(input_match)
         input_body = input_match.group("body")
-        self.assertTrue(input_body.strip().startswith("sessionRequests.reset();"))
+        self.assertTrue(input_body.strip().startswith("sessionRequests.reset();\n  mailOperationGate.reset();"))
+        self.assertIn("mailOperationGate.reset();", input_body)
+        self.assertLess(input_body.index("sessionRequests.reset();"), input_body.index("mailOperationGate.reset();"))
+        self.assertLess(input_body.index("mailOperationGate.reset();"), input_body.index("resetSessionResults();"))
+        self.assertLess(input_body.index("mailOperationGate.reset();"), input_body.index("setBusy(false);"))
         self.assertLess(input_body.index("sessionRequests.reset();"), input_body.index("resetSessionResults();"))
         self.assertIn("setBusy(false);", input_body)
 
@@ -343,10 +390,18 @@ class StaticUiTests(unittest.TestCase):
         for function_name in ["fetchMail", "retryFailedAccounts"]:
             with self.subTest(function_name=function_name):
                 body = async_function_body(function_name)
-                self.assertTrue(
-                    body.strip().startswith("const operationRevision = sessionRequests.currentRevision();")
+                self.assertIn(
+                    "const operationToken = mailOperationGate.tryStart();\n"
+                    "  if (operationToken === null) {\n"
+                    "    return;\n"
+                    "  }",
+                    body,
                 )
                 self.assertIn("const operationRevision = sessionRequests.currentRevision();", body)
+                self.assertLess(
+                    body.index("const operationToken = mailOperationGate.tryStart();"),
+                    body.index("const operationRevision = sessionRequests.currentRevision();"),
+                )
                 self.assertIn("const parsed = await ensureParsed();", body)
                 self.assertIn("!parsed || !sessionRequests.isCurrent(operationRevision)", body)
                 self.assertRegex(
@@ -363,7 +418,7 @@ class StaticUiTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "finally {\n"
-                    "    if (sessionRequests.isCurrent(operationRevision)) {\n"
+                    "    if (mailOperationGate.finish(operationToken) && sessionRequests.isCurrent(operationRevision)) {\n"
                     "      setBusy(false);\n"
                     "      syncSessionActions();\n"
                     "    }\n"
@@ -2843,7 +2898,7 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn(app_script, html)
         self.assertLess(html.index(logic_script), html.index(app_script))
         self.assertIn(
-            "const { createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertIn("selectedMessageKey: null", js)

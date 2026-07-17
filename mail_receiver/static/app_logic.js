@@ -1,6 +1,36 @@
 (function (globalScope) {
   'use strict';
 
+  function createOperationGate() {
+    var activeToken = null;
+
+    function tryStart() {
+      if (activeToken !== null) {
+        return null;
+      }
+      activeToken = {};
+      return activeToken;
+    }
+
+    function finish(token) {
+      if (activeToken === null || token !== activeToken) {
+        return false;
+      }
+      activeToken = null;
+      return true;
+    }
+
+    function reset() {
+      activeToken = null;
+    }
+
+    return {
+      finish: finish,
+      reset: reset,
+      tryStart: tryStart,
+    };
+  }
+
   function createSessionCoordinator(controllerFactory) {
     var revision = 0;
     var controllers = new Set();
@@ -73,6 +103,7 @@
   }
 
   var api = {
+    createOperationGate: createOperationGate,
     createSessionCoordinator: createSessionCoordinator,
     messageKey: messageKey,
     findMessageByKey: findMessageByKey,

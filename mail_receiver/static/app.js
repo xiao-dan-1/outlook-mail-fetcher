@@ -1,4 +1,4 @@
-const { createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;
+const { createOperationGate, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;
 
 const state = {
   config: null,
@@ -16,6 +16,7 @@ const state = {
 };
 
 const sessionRequests = createSessionCoordinator();
+const mailOperationGate = createOperationGate();
 
 const THEME_STORAGE_KEY = "mailReceiverTheme";
 const AUTO_PARSE_DELAY_MS = 300;
@@ -1027,12 +1028,16 @@ async function copyCurrentVerificationCode() {
 }
 
 async function retryFailedAccounts() {
-  const operationRevision = sessionRequests.currentRevision();
   const failedEmails = state.failedRows.map((row) => row.email).filter(Boolean);
   if (!failedEmails.length) {
     setStatus("暂无失败账号", "ready");
     return;
   }
+  const operationToken = mailOperationGate.tryStart();
+  if (operationToken === null) {
+    return;
+  }
+  const operationRevision = sessionRequests.currentRevision();
   try {
     const parsed = await ensureParsed();
     if (!parsed || !sessionRequests.isCurrent(operationRevision)) {
@@ -1064,7 +1069,7 @@ async function retryFailedAccounts() {
     addLog(`重试失败：${error.message}`, "fail");
     setStatus("重试失败", "error");
   } finally {
-    if (sessionRequests.isCurrent(operationRevision)) {
+    if (mailOperationGate.finish(operationToken) && sessionRequests.isCurrent(operationRevision)) {
       setBusy(false);
       syncSessionActions();
     }
@@ -1896,6 +1901,10 @@ async function fetchOneAccount(account) {
 }
 
 async function fetchMail() {
+  const operationToken = mailOperationGate.tryStart();
+  if (operationToken === null) {
+    return;
+  }
   const operationRevision = sessionRequests.currentRevision();
   try {
     const parsed = await ensureParsed();
@@ -1933,7 +1942,7 @@ async function fetchMail() {
     }
     setStatus("拉取失败", "error");
   } finally {
-    if (sessionRequests.isCurrent(operationRevision)) {
+    if (mailOperationGate.finish(operationToken) && sessionRequests.isCurrent(operationRevision)) {
       setBusy(false);
       syncSessionActions();
     }
@@ -1992,6 +2001,7 @@ el.privacyToggle.addEventListener("click", () => {
 });
 el.accountTextInput.addEventListener("input", () => {
   sessionRequests.reset();
+  mailOperationGate.reset();
   clearScheduledAccountParse();
   state.accounts = [];
   state.accountStatus.clear();
