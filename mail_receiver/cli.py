@@ -15,6 +15,7 @@ from .imap_client import (
     mock_messages,
 )
 from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
+from .output import visible_text
 from .storage import DEFAULT_DB_PATH, MailStore
 
 
@@ -174,12 +175,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "show":
             return show(args)
     except AccountFormatError as exc:
-        print(f"account format error: {exc}", file=sys.stderr)
+        print(f"account format error: {visible_text(exc)}", file=sys.stderr)
         return 2
     except Exception as exc:
         if args.debug:
             raise
-        print(f"error: {exc}", file=sys.stderr)
+        print(f"error: {visible_text(exc)}", file=sys.stderr)
         return 1
 
     parser.error("unknown command")
@@ -191,9 +192,10 @@ def inspect_accounts(account_file: str) -> int:
     print(f"accounts: {len(accounts)}")
     for account in accounts:
         print(
-            f"line={account.source_line} email={account.email} "
-            f"password={account.masked_password} client_id={account.client_id} "
-            f"refresh_token={account.masked_refresh_token}"
+            f"line={account.source_line} email={visible_text(account.email)} "
+            f"password={visible_text(account.masked_password)} "
+            f"client_id={visible_text(account.client_id)} "
+            f"refresh_token={visible_text(account.masked_refresh_token)}"
         )
     return 0
 
@@ -203,7 +205,7 @@ def fetch(args: argparse.Namespace) -> int:
     if args.account:
         accounts = [account for account in accounts if account.email.lower() == args.account.lower()]
         if not accounts:
-            print(f"account not found: {args.account}", file=sys.stderr)
+            print(f"account not found: {visible_text(args.account)}", file=sys.stderr)
             return 1
 
     store = MailStore(args.db)
@@ -213,7 +215,12 @@ def fetch(args: argparse.Namespace) -> int:
     total_inserted = 0
     failures: list[tuple[str, str]] = []
     for account in accounts:
-        logging.info("fetching %s mailbox=%s limit=%s", account.email, args.mailbox, args.limit)
+        logging.info(
+            "fetching %s mailbox=%s limit=%s",
+            visible_text(account.email),
+            visible_text(args.mailbox),
+            args.limit,
+        )
         try:
             records = (
                 mock_messages(account, mailbox=args.mailbox, limit=args.limit)
@@ -234,22 +241,31 @@ def fetch(args: argparse.Namespace) -> int:
             inserted = store.save_many(records)
             total_seen += len(records)
             total_inserted += inserted
-            print(f"{account.email}: fetched={len(records)} inserted={inserted}")
+            print(
+                f"{visible_text(account.email)}: "
+                f"fetched={len(records)} inserted={inserted}"
+            )
         except Exception as exc:
             message = str(exc)
             failures.append((account.email, message))
-            print(f"{account.email}: failed={message}", file=sys.stderr)
+            print(
+                f"{visible_text(account.email)}: failed={visible_text(message)}",
+                file=sys.stderr,
+            )
             if args.stop_on_error:
                 raise
 
     print(
         f"done: accounts={len(accounts)} fetched={total_seen} inserted={total_inserted} "
-        f"failed={len(failures)} db={store.path}"
+        f"failed={len(failures)} db={visible_text(store.path)}"
     )
     if failures:
         print("failures:", file=sys.stderr)
         for email, message in failures:
-            print(f"- {email}: {message}", file=sys.stderr)
+            print(
+                f"- {visible_text(email)}: {visible_text(message)}",
+                file=sys.stderr,
+            )
         return 1
     return 0
 
@@ -261,8 +277,9 @@ def search(args: argparse.Namespace) -> int:
     print(f"results: {len(results)}")
     for email in results:
         print(
-            f"[{email.id}] {email.sent_at or '-'} {email.account_email} "
-            f"from={email.sender} subject={email.subject}"
+            f"[{email.id}] {visible_text(email.sent_at or '-')} "
+            f"{visible_text(email.account_email)} "
+            f"from={visible_text(email.sender)} subject={visible_text(email.subject)}"
         )
     return 0
 
@@ -284,16 +301,16 @@ def show(args: argparse.Namespace) -> int:
         print(f"email not found: {args.email_id}", file=sys.stderr)
         return 1
     print(f"id: {email.id}")
-    print(f"account: {email.account_email}")
-    print(f"mailbox: {email.mailbox}")
-    print(f"uid: {email.uid}")
-    print(f"message_id: {email.message_id or '-'}")
-    print(f"sent_at: {email.sent_at or '-'}")
-    print(f"from: {email.sender}")
-    print(f"to: {email.recipients}")
-    print(f"subject: {email.subject}")
+    print(f"account: {visible_text(email.account_email)}")
+    print(f"mailbox: {visible_text(email.mailbox)}")
+    print(f"uid: {visible_text(email.uid)}")
+    print(f"message_id: {visible_text(email.message_id or '-')}")
+    print(f"sent_at: {visible_text(email.sent_at or '-')}")
+    print(f"from: {visible_text(email.sender)}")
+    print(f"to: {visible_text(email.recipients)}")
+    print(f"subject: {visible_text(email.subject)}")
     print("")
-    print(email.body_preview)
+    print(visible_text(email.body_preview))
     return 0
 
 

@@ -24,6 +24,7 @@ from .imap_client import (
     mock_messages,
 )
 from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
+from .output import visible_text
 
 
 LOGGER = logging.getLogger(__name__)
@@ -395,7 +396,11 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
             self._run_json(lambda: callback(self._read_json(), config))
 
         def log_message(self, format: str, *args: Any) -> None:
-            LOGGER.info("%s - %s", self.address_string(), format % args)
+            LOGGER.info(
+                "%s - %s",
+                visible_text(self.address_string()),
+                visible_text(format % args),
+            )
 
         def _serve_static(self, relative_path: str) -> None:
             safe_name = relative_path.replace("\\", "/").lstrip("/")

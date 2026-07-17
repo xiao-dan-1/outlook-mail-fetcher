@@ -27,6 +27,30 @@ from mail_receiver.web import (
 
 
 class WebServiceTests(unittest.TestCase):
+    def test_log_message_escapes_address_and_formatted_request_before_logging(self) -> None:
+        handler_type = create_handler(WebConfig())
+        handler = object.__new__(handler_type)
+
+        with patch.object(
+            handler_type,
+            "address_string",
+            return_value="client\r\nFORGED\x1b\x00\u2028",
+        ), patch("mail_receiver.web.LOGGER.info") as info:
+            handler.log_message("request %s", "path\r\nINJECT\x1b[31m\x00\u2029")
+
+        info.assert_called_once_with(
+            "%s - %s",
+            "client\\r\\nFORGED\\x1b\\x00\\u2028",
+            "request path\\r\\nINJECT\\x1b[31m\\x00\\u2029",
+        )
+        for argument in info.call_args.args[1:]:
+            self.assertNotIn("\r", argument)
+            self.assertNotIn("\n", argument)
+            self.assertNotIn("\x1b", argument)
+            self.assertNotIn("\x00", argument)
+            self.assertNotIn("\u2028", argument)
+            self.assertNotIn("\u2029", argument)
+
     def request_json(
         self,
         method: str,
