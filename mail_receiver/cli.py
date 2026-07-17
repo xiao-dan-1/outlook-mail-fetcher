@@ -17,6 +17,16 @@ from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
 from .storage import DEFAULT_DB_PATH, MailStore
 
 
+def _non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"must be an integer: {value!r}") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be non-negative")
+    return parsed
+
+
 def _add_common_options(
     parser: argparse.ArgumentParser,
     *,
@@ -47,7 +57,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_options(fetch_parser, suppress_defaults=True)
     fetch_parser.add_argument("account_file", help="Account file path.")
     fetch_parser.add_argument("--mailbox", default="INBOX", help="Mailbox name.")
-    fetch_parser.add_argument("--limit", type=int, default=20, help="Messages per account.")
+    fetch_parser.add_argument(
+        "--limit",
+        type=_non_negative_int,
+        default=20,
+        help="Messages per account.",
+    )
     fetch_parser.add_argument("--account", help="Only fetch one account email.")
     fetch_parser.add_argument("--mock", action="store_true", help="Use local mock messages.")
     fetch_parser.add_argument(
@@ -66,7 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_options(search_parser, suppress_defaults=True)
     search_parser.add_argument("--query", "-q", required=True, help="Keyword to search.")
     search_parser.add_argument("--account", help="Only search one account.")
-    search_parser.add_argument("--limit", type=int, default=20, help="Maximum result count.")
+    search_parser.add_argument(
+        "--limit",
+        type=_non_negative_int,
+        default=20,
+        help="Maximum result count.",
+    )
 
     show_parser = subparsers.add_parser("show", help="Show one stored mail by id.")
     _add_common_options(show_parser, suppress_defaults=True)

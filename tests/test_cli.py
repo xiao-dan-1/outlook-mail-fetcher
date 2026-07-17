@@ -1,5 +1,5 @@
 from pathlib import Path
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 from tempfile import TemporaryDirectory
 import unittest
@@ -8,6 +8,22 @@ from unittest.mock import patch
 from mail_receiver import cli
 from mail_receiver.imap_client import EmailRecord
 from mail_receiver.storage import DEFAULT_DB_PATH, MailStore
+
+
+def _record(*, uid: str = "1", subject: str = "Needle") -> EmailRecord:
+    return EmailRecord(
+        account_email="user@outlook.com",
+        mailbox="INBOX",
+        uid=uid,
+        uidvalidity="100",
+        message_id=None,
+        subject=subject,
+        sender="sender@example.com",
+        recipients="user@outlook.com",
+        sent_at=None,
+        body_preview="needle",
+        raw_message=b"raw",
+    )
 
 
 class CliFetchTests(unittest.TestCase):
@@ -71,6 +87,136 @@ class CliFetchTests(unittest.TestCase):
         )
 
         self.assertEqual(parsed.db, "after.sqlite3")
+
+    def test_fetch_rejects_negative_limit_before_database_or_network_work(self) -> None:
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            account_file = base / "accounts.txt"
+            database = base / "mail.sqlite3"
+            account_file.write_text(
+                "ok@outlook.com----password----client----refresh\n",
+                encoding="utf-8",
+            )
+            error = io.StringIO()
+
+            with patch("mail_receiver.cli.fetch_messages") as real_fetch, patch(
+                "mail_receiver.cli.mock_messages"
+            ) as mock_fetch, self.assertRaises(SystemExit) as raised, redirect_stderr(error):
+                cli.main(
+                    [
+                        "fetch",
+                        str(account_file),
+                        "--limit",
+                        "-1",
+                        "--db",
+                        str(database),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("--limit", error.getvalue())
+            self.assertIn("non-negative", error.getvalue())
+            self.assertFalse(database.exists())
+            real_fetch.assert_not_called()
+            mock_fetch.assert_not_called()
+
+    def test_limit_rejects_non_integer_with_a_clear_parser_error(self) -> None:
+        error = io.StringIO()
+
+        with self.assertRaises(SystemExit) as raised, redirect_stderr(error):
+            cli.build_parser().parse_args(
+                ["fetch", "accounts.txt", "--limit", "not-a-number"]
+            )
+
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("--limit", error.getvalue())
+        self.assertIn("integer", error.getvalue())
+        self.assertIn("not-a-number", error.getvalue())
+
+    def test_search_rejects_negative_limit_instead_of_returning_every_row(self) -> None:
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            database = base / "mail.sqlite3"
+            store = MailStore(database)
+            store.initialize()
+            store.save_many(
+                [_record(uid=str(uid), subject=f"Needle {uid}") for uid in range(2)]
+            )
+            output = io.StringIO()
+            error = io.StringIO()
+
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(
+                output
+            ), redirect_stderr(error):
+                cli.main(
+                    [
+                        "--db",
+                        str(database),
+                        "search",
+                        "--query",
+                        "needle",
+                        "--limit",
+                        "-1",
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("--limit", error.getvalue())
+            self.assertIn("non-negative", error.getvalue())
+            self.assertEqual(output.getvalue(), "")
+
+    def test_fetch_mock_accepts_zero_limit_and_stores_no_messages(self) -> None:
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            account_file = base / "accounts.txt"
+            database = base / "mail.sqlite3"
+            account_file.write_text(
+                "ok@outlook.com----password----client----refresh\n",
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+
+            with redirect_stdout(output):
+                result = cli.main(
+                    [
+                        "--db",
+                        str(database),
+                        "fetch",
+                        str(account_file),
+                        "--mock",
+                        "--limit",
+                        "0",
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(MailStore(database).count(), 0)
+            self.assertIn("fetched=0 inserted=0", output.getvalue())
+
+    def test_search_accepts_zero_limit_without_printing_stored_rows(self) -> None:
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            database = base / "mail.sqlite3"
+            store = MailStore(database)
+            store.initialize()
+            store.save_many([_record()])
+            output = io.StringIO()
+
+            with redirect_stdout(output):
+                result = cli.main(
+                    [
+                        "search",
+                        "--query",
+                        "needle",
+                        "--limit",
+                        "0",
+                        "--db",
+                        str(database),
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(output.getvalue(), "results: 0\n")
 
     def test_fetch_continues_after_one_account_failure(self) -> None:
         with TemporaryDirectory() as directory:
