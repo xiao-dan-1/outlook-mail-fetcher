@@ -15,7 +15,7 @@ DEFAULT_DB_PATH = Path("mail_store.sqlite3")
 EMAILS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS emails (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_email TEXT NOT NULL,
+    account_email TEXT NOT NULL COLLATE NOCASE,
     mailbox TEXT NOT NULL,
     uid TEXT NOT NULL,
     uidvalidity TEXT NOT NULL DEFAULT '',
@@ -35,6 +35,19 @@ EMAIL_INDEX_SQL = (
     "CREATE INDEX IF NOT EXISTS idx_emails_account ON emails(account_email)",
     "CREATE INDEX IF NOT EXISTS idx_emails_sender ON emails(sender)",
     "CREATE INDEX IF NOT EXISTS idx_emails_sent_at ON emails(sent_at)",
+)
+
+EXPECTED_EMAIL_IDENTITY_INDEX = (
+    ("account_email", 0, "NOCASE"),
+    ("mailbox", 0, "BINARY"),
+    ("uidvalidity", 0, "BINARY"),
+    ("uid", 0, "BINARY"),
+)
+
+ACCOUNT_EMAIL_NOCASE_DECLARATION = re.compile(
+    r"(?:\(|,)\s*(?:account_email|\"account_email\"|`account_email`|\[account_email\])"
+    r"\s+TEXT\s+NOT\s+NULL\s+COLLATE\s+NOCASE(?:\s|,)",
+    re.IGNORECASE,
 )
 
 
@@ -76,6 +89,7 @@ class MailStore:
 
     def initialize(self) -> None:
         with self.session() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             if _emails_table_exists(connection) and _emails_schema_needs_rebuild(connection):
                 _rebuild_emails_table(connection)
             _create_emails_table(connection)
@@ -221,15 +235,42 @@ def _emails_schema_needs_rebuild(connection: sqlite3.Connection) -> bool:
     columns = _email_columns(connection)
     if "uidvalidity" not in columns:
         return True
+    if not _has_expected_email_identity_index(connection):
+        return True
     row = connection.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'emails'"
     ).fetchone()
     table_sql = str(row[0] if row else "")
-    normalized = re.sub(r"\s+", "", table_sql.lower())
-    return "unique(account_email,mailbox,uidvalidity,uid)" not in normalized
+    return ACCOUNT_EMAIL_NOCASE_DECLARATION.search(table_sql) is None
+
+
+def _has_expected_email_identity_index(connection: sqlite3.Connection) -> bool:
+    unique_indexes = [
+        row for row in connection.execute("PRAGMA index_list(emails)").fetchall() if row[2]
+    ]
+    if len(unique_indexes) != 1 or unique_indexes[0][4]:
+        return False
+
+    index_name = _quote_sqlite_identifier(str(unique_indexes[0][1]))
+    index_rows = connection.execute(f"PRAGMA index_xinfo({index_name})").fetchall()
+    key_rows = [row for row in index_rows if len(row) > 5 and row[5]]
+    signature = tuple(
+        (
+            str(row[2]),
+            int(row[3]),
+            str(row[4]).upper(),
+        )
+        for row in key_rows
+    )
+    return signature == EXPECTED_EMAIL_IDENTITY_INDEX
+
+
+def _quote_sqlite_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
 
 
 def _rebuild_emails_table(connection: sqlite3.Connection) -> None:
+    sequence_floor = _emails_autoincrement_floor(connection)
     connection.execute("ALTER TABLE emails RENAME TO emails_old")
     _create_emails_table(connection)
     old_columns = _email_columns(connection, "emails_old")
@@ -267,9 +308,54 @@ def _rebuild_emails_table(connection: sqlite3.Connection) -> None:
             raw_message,
             {fetched_at_expr}
         FROM emails_old
+        ORDER BY id ASC
         """
     )
     connection.execute("DROP TABLE emails_old")
+    _set_emails_autoincrement_floor(connection, sequence_floor)
+
+
+def _emails_autoincrement_floor(connection: sqlite3.Connection) -> int:
+    row = connection.execute("SELECT MAX(id) FROM emails").fetchone()
+    maximum_id = int(row[0]) if row and row[0] is not None else 0
+    if not _sqlite_table_exists(connection, "sqlite_sequence"):
+        return maximum_id
+    row = connection.execute(
+        "SELECT MAX(seq) FROM sqlite_sequence WHERE name = 'emails'"
+    ).fetchone()
+    sequence = int(row[0]) if row and row[0] is not None else 0
+    return max(maximum_id, sequence)
+
+
+def _set_emails_autoincrement_floor(
+    connection: sqlite3.Connection,
+    sequence_floor: int,
+) -> None:
+    if sequence_floor <= 0:
+        return
+    row = connection.execute(
+        "SELECT MAX(seq) FROM sqlite_sequence WHERE name = 'emails'"
+    ).fetchone()
+    current_sequence = int(row[0]) if row and row[0] is not None else 0
+    if current_sequence >= sequence_floor:
+        return
+    cursor = connection.execute(
+        "UPDATE sqlite_sequence SET seq = ? WHERE name = 'emails'",
+        (sequence_floor,),
+    )
+    if cursor.rowcount == 0:
+        connection.execute(
+            "INSERT INTO sqlite_sequence(name, seq) VALUES ('emails', ?)",
+            (sequence_floor,),
+        )
+
+
+def _sqlite_table_exists(connection: sqlite3.Connection, table: str) -> bool:
+    row = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table,),
+    ).fetchone()
+    return row is not None
 
 
 def _row_to_stored_email(row: sqlite3.Row) -> StoredEmail:
