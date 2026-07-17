@@ -80,7 +80,10 @@ def check_accounts_data(payload: dict[str, Any], config: WebConfig) -> dict[str,
     accounts = resolve_accounts(payload, config)
     mailbox = str(payload.get("mailbox") or "INBOX")
     selected_account = str(payload.get("account") or "").strip()
-    stop_on_error = bool(payload.get("stop_on_error", False))
+    stop_on_error = payload_bool(payload, "stop_on_error", False)
+    imap_port = payload_int(payload, "imap_port", DEFAULT_IMAP_PORT)
+    imap_timeout = payload_int(payload, "imap_timeout", WEB_DEFAULT_IMAP_TIMEOUT)
+    token_timeout = payload_int(payload, "token_timeout", WEB_DEFAULT_TOKEN_TIMEOUT)
     if selected_account:
         accounts = filter_accounts(accounts, selected_account)
 
@@ -93,11 +96,11 @@ def check_accounts_data(payload: dict[str, Any], config: WebConfig) -> dict[str,
                 account,
                 mailbox=mailbox,
                 host=str(payload.get("imap_host") or DEFAULT_IMAP_HOST),
-                port=payload_int(payload, "imap_port", DEFAULT_IMAP_PORT),
-                imap_timeout=payload_int(payload, "imap_timeout", WEB_DEFAULT_IMAP_TIMEOUT),
+                port=imap_port,
+                imap_timeout=imap_timeout,
                 token_endpoint=str(payload.get("token_endpoint") or TOKEN_ENDPOINT),
                 scope=str(payload.get("scope") or DEFAULT_SCOPE),
-                token_timeout=payload_int(payload, "token_timeout", WEB_DEFAULT_TOKEN_TIMEOUT),
+                token_timeout=token_timeout,
                 debug=False,
             )
             ok_count += 1
@@ -138,9 +141,12 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
     mailbox = str(payload.get("mailbox") or "INBOX")
     limit = payload_int(payload, "limit", 20)
     selected_account = str(payload.get("account") or "").strip()
-    use_mock = bool(payload.get("mock", False))
-    stop_on_error = bool(payload.get("stop_on_error", False))
-    include_raw = bool(payload.get("include_raw", False))
+    use_mock = payload_bool(payload, "mock", False)
+    stop_on_error = payload_bool(payload, "stop_on_error", False)
+    include_raw = payload_bool(payload, "include_raw", False)
+    imap_port = payload_int(payload, "imap_port", DEFAULT_IMAP_PORT)
+    imap_timeout = payload_int(payload, "imap_timeout", WEB_DEFAULT_IMAP_TIMEOUT)
+    token_timeout = payload_int(payload, "token_timeout", WEB_DEFAULT_TOKEN_TIMEOUT)
     max_bytes = None if include_raw else WEB_PREVIEW_MAX_BYTES
 
     accounts = resolve_accounts(payload, config)
@@ -171,11 +177,11 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
                     limit=limit,
                     max_bytes=max_bytes,
                     host=str(payload.get("imap_host") or DEFAULT_IMAP_HOST),
-                    port=payload_int(payload, "imap_port", DEFAULT_IMAP_PORT),
-                    imap_timeout=payload_int(payload, "imap_timeout", WEB_DEFAULT_IMAP_TIMEOUT),
+                    port=imap_port,
+                    imap_timeout=imap_timeout,
                     token_endpoint=str(payload.get("token_endpoint") or TOKEN_ENDPOINT),
                     scope=str(payload.get("scope") or DEFAULT_SCOPE),
-                    token_timeout=payload_int(payload, "token_timeout", WEB_DEFAULT_TOKEN_TIMEOUT),
+                    token_timeout=token_timeout,
                     debug=False,
                     diagnostics=diagnostics,
                 )
@@ -262,7 +268,18 @@ def payload_int(payload: dict[str, Any], name: str, default: int) -> int:
     value = payload.get(name, default)
     if value in (None, ""):
         return default
-    return int(value)
+    if type(value) is not int:
+        raise ValueError(f"{name} must be an integer")
+    return value
+
+
+def payload_bool(payload: dict[str, Any], name: str, default: bool) -> bool:
+    value = payload.get(name, default)
+    if value is None:
+        return default
+    if type(value) is not bool:
+        raise ValueError(f"{name} must be a boolean")
+    return value
 
 
 def elapsed_ms(started_at: float) -> int:

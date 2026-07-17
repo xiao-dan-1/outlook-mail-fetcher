@@ -175,6 +175,77 @@ class WebServiceTests(unittest.TestCase):
                 self.assert_json_error(response, 400)
                 self.assertIn(constant, response[2]["error"])
 
+    def test_fetch_rejects_non_integer_limit_over_http(self) -> None:
+        account_text = "user@outlook.com----secret----client----refresh-token"
+        for limit in (1.9, True, "8"):
+            with self.subTest(limit=limit):
+                response = self.request_json(
+                    "POST",
+                    "/api/fetch",
+                    body=json.dumps(
+                        {"account_text": account_text, "mock": True, "limit": limit}
+                    ).encode("utf-8"),
+                )
+
+                self.assert_json_error(response, 400)
+                self.assertIn("limit", response[2]["error"])
+
+    def test_check_rejects_non_integer_imap_port_over_http(self) -> None:
+        response = self.request_json(
+            "POST",
+            "/api/check",
+            body=json.dumps(
+                {
+                    "account_text": "user@outlook.com----secret----client----refresh-token",
+                    "imap_port": "abc",
+                }
+            ).encode("utf-8"),
+        )
+
+        self.assert_json_error(response, 400)
+        self.assertIn("imap_port", response[2]["error"])
+
+    def test_fetch_rejects_string_boolean_fields_over_http(self) -> None:
+        account_text = "user@outlook.com----secret----client----refresh-token"
+        for name in ("mock", "include_raw", "stop_on_error"):
+            with self.subTest(name=name):
+                response = self.request_json(
+                    "POST",
+                    "/api/fetch",
+                    body=json.dumps(
+                        {"account_text": account_text, "mock": True, name: "false"}
+                    ).encode("utf-8"),
+                )
+
+                self.assert_json_error(response, 400)
+                self.assertIn(name, response[2]["error"])
+
+    def test_payload_int_rejects_non_finite_floats_with_field_name(self) -> None:
+        for value in (float("inf"), float("-inf"), float("nan")):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "imap_timeout"):
+                    web.payload_int({"imap_timeout": value}, "imap_timeout", 8)
+
+    def test_payload_int_accepts_only_int_values(self) -> None:
+        self.assertEqual(web.payload_int({}, "limit", 20), 20)
+        self.assertEqual(web.payload_int({"limit": None}, "limit", 20), 20)
+        self.assertEqual(web.payload_int({"limit": ""}, "limit", 20), 20)
+        self.assertEqual(web.payload_int({"limit": 8}, "limit", 20), 8)
+        for value in (True, False, 1.9, "8", "abc"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "limit"):
+                    web.payload_int({"limit": value}, "limit", 20)
+
+    def test_payload_bool_accepts_only_boolean_values(self) -> None:
+        self.assertFalse(web.payload_bool({}, "mock", False))
+        self.assertTrue(web.payload_bool({"mock": None}, "mock", True))
+        self.assertFalse(web.payload_bool({"mock": False}, "mock", True))
+        self.assertTrue(web.payload_bool({"mock": True}, "mock", False))
+        for value in ("false", "true", 0, 1, ""):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "mock"):
+                    web.payload_bool({"mock": value}, "mock", False)
+
     def test_unknown_post_route_returns_json_not_found_without_reading_body(self) -> None:
         response = self.request_json(
             "POST",
