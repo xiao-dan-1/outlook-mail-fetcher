@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from mail_receiver.accounts import Account
 from mail_receiver.imap_client import (
+    _parse_fetch_item,
     build_xoauth2_string,
     check_account,
     email_record_from_message,
@@ -23,6 +24,22 @@ class ImapClientTests(unittest.TestCase):
             build_xoauth2_string("user@outlook.com", "token"),
             "user=user@outlook.com\x01auth=Bearer token\x01\x01",
         )
+
+    def test_partial_fetch_treats_unparseable_rfc822_size_as_incomplete(self) -> None:
+        metadata = (
+            b"1 (UID 42 RFC822.SIZE "
+            + (b"9" * 5000)
+            + b" BODY[]<0> {3}"
+        )
+
+        uid, raw_message, raw_message_complete = _parse_fetch_item(
+            (metadata, b"abc"),
+            is_partial=True,
+        )
+
+        self.assertEqual(uid, "42")
+        self.assertEqual(raw_message, b"abc")
+        self.assertFalse(raw_message_complete)
 
     def test_email_record_from_message_extracts_headers_and_body(self) -> None:
         raw = (

@@ -175,7 +175,7 @@ class WebServiceTests(unittest.TestCase):
             sent_at=None,
             body_preview="caf�",
             raw_message=raw_message,
-            raw_message_complete=True,
+            raw_message_complete=False,
         )
 
         with patch("mail_receiver.web.fetch_messages", return_value=[record]):
@@ -190,7 +190,7 @@ class WebServiceTests(unittest.TestCase):
         message = fetch_result["messages"][0]
         self.assertIn("caf�", message["raw_message"])
         self.assertEqual(base64.b64decode(message["raw_message_base64"]), raw_message)
-        self.assertTrue(message["raw_message_complete"])
+        self.assertFalse(message["raw_message_complete"])
 
     def test_mock_fetch_preserves_zero_limit(self) -> None:
         with TemporaryDirectory() as directory:

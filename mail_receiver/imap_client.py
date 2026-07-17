@@ -492,9 +492,12 @@ def _parse_fetch_item(
     raw_message_complete = True
     if is_partial:
         size_match = RFC822_SIZE_RE.search(metadata_bytes)
-        raw_message_complete = (
-            size_match is not None and int(size_match.group(1)) == len(item[1])
-        )
+        raw_message_complete = False
+        if size_match is not None:
+            try:
+                raw_message_complete = int(size_match.group(1)) == len(item[1])
+            except ValueError:
+                pass
     return match.group(1).decode("ascii"), item[1], raw_message_complete
 
 
