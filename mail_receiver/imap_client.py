@@ -186,19 +186,18 @@ def fetch_messages(
             "select",
             lambda: _select_mailbox_info(client, options.mailbox),
         )
-        sequence_set = _recent_sequence_set(selection.message_count, options.limit)
-        if sequence_set is None:
-            _record_empty_fetch_diagnostics(options.diagnostics)
-            return []
         payloads = _timed_stage(
             options.diagnostics,
             "fetch",
-            lambda: _fetch_message_payloads_by_sequence(
+            lambda: _fetch_recent_message_payloads_by_uid(
                 client,
-                sequence_set=sequence_set,
+                limit=options.limit,
                 message_parts=_message_fetch_parts(options.max_bytes),
             ),
         )
+        if not payloads:
+            _record_empty_fetch_diagnostics(options.diagnostics)
+            return []
         if options.diagnostics is not None:
             options.diagnostics.raw_bytes = sum(
                 len(raw_message) for _uid, raw_message, _raw_message_complete in payloads
@@ -310,47 +309,55 @@ def _parse_uidvalidity_response(data: Iterable[object], *, allow_bare_digits: bo
     return None
 
 
-def _recent_sequence_set(message_count: int, limit: int) -> str | None:
-    if message_count <= 0 or limit <= 0:
-        return None
-    start = max(1, message_count - limit + 1)
-    return f"{start}:*"
-
-
-def _fetch_messages_by_sequence(
+def _fetch_recent_message_payloads_by_uid(
     client: imaplib.IMAP4_SSL,
     *,
-    account_email: str,
-    mailbox: str,
-    sequence_set: str,
-    uidvalidity: str,
+    limit: int,
     message_parts: str = FETCH_MESSAGE_PARTS,
-) -> list[EmailRecord]:
-    payloads = _fetch_message_payloads_by_sequence(
+) -> list[tuple[str, bytes, bool]]:
+    uids = _search_message_uids(client)
+    recent_uids = uids[-limit:]
+    if not recent_uids:
+        return []
+    return _fetch_message_payloads_by_uid(
         client,
-        sequence_set=sequence_set,
+        uid_set=",".join(recent_uids),
         message_parts=message_parts,
     )
-    return _records_from_message_payloads(
-        payloads,
-        account_email=account_email,
-        mailbox=mailbox,
-        uidvalidity=uidvalidity,
+
+
+def _search_message_uids(client: imaplib.IMAP4_SSL) -> list[str]:
+    status, data = _imap_operation(
+        "search message UIDs",
+        lambda: client.uid("SEARCH", None, "ALL"),
     )
+    if status != "OK":
+        raise ImapReceiveError(f"failed to search message UIDs: {status}")
+
+    uids: list[str] = []
+    for item in data or []:
+        item_bytes = _metadata_bytes(item)
+        if item_bytes is None:
+            continue
+        for uid in item_bytes.split():
+            if not uid.isdigit():
+                raise ImapReceiveError("IMAP UID SEARCH response included an invalid UID")
+            uids.append(uid.decode("ascii"))
+    return uids
 
 
-def _fetch_message_payloads_by_sequence(
+def _fetch_message_payloads_by_uid(
     client: imaplib.IMAP4_SSL,
     *,
-    sequence_set: str,
+    uid_set: str,
     message_parts: str = FETCH_MESSAGE_PARTS,
 ) -> list[tuple[str, bytes, bool]]:
     status, data = _imap_operation(
-        f"fetch messages {sequence_set}",
-        lambda: client.fetch(sequence_set, message_parts),
+        f"fetch message UIDs {uid_set}",
+        lambda: client.uid("FETCH", uid_set, message_parts),
     )
     if status != "OK":
-        raise ImapReceiveError(f"failed to fetch messages {sequence_set}: {status}")
+        raise ImapReceiveError(f"failed to fetch message UIDs {uid_set}: {status}")
     is_partial = "BODY.PEEK[]<0." in message_parts.upper()
     return list(_iter_fetch_messages(data, is_partial=is_partial))
 

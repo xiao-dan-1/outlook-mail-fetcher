@@ -233,10 +233,13 @@ class InstrumentedIMAP:
     messages: list[tuple[str, bytes]] = []
     select_status = "OK"
     select_error: BaseException | None = None
+    search_status = "OK"
+    search_error: BaseException | None = None
     fetch_status = "OK"
     fetch_error: BaseException | None = None
     response_error: BaseException | None = None
     malformed_sequences: set[int] = set()
+    expunge_uid_after_search: str | None = None
     uidvalidity: bytes | None = b"12345"
     select_uidvalidity: bytes | None = None
 
@@ -262,10 +265,13 @@ class InstrumentedIMAP:
         cls.messages = [(str(index), _raw_message(str(index))) for index in range(1, count + 1)]
         cls.select_status = select_status
         cls.select_error = None
+        cls.search_status = "OK"
+        cls.search_error = None
         cls.fetch_status = "OK"
         cls.fetch_error = None
         cls.response_error = None
         cls.malformed_sequences = set()
+        cls.expunge_uid_after_search = None
         cls.uidvalidity = uidvalidity
         cls.select_uidvalidity = select_uidvalidity
 
@@ -299,59 +305,45 @@ class InstrumentedIMAP:
     def uid(self, command: str, *args: object) -> tuple[str, list[object]]:
         self.commands.append(("UID", command, *args))
         if command == "SEARCH":
+            if self.search_error is not None:
+                raise self.search_error
+            if self.search_status != "OK":
+                return self.search_status, [b""]
             uids = b" ".join(uid.encode("ascii") for uid, _ in self.messages)
+            if self.expunge_uid_after_search is not None:
+                self.messages = [
+                    (uid, raw)
+                    for uid, raw in self.messages
+                    if uid != self.expunge_uid_after_search
+                ]
             return "OK", [uids]
         if command == "FETCH":
-            requested_uid = str(args[0])
-            for uid, raw in self.messages:
-                if uid == requested_uid:
-                    header = f"1 (UID {uid} RFC822 {{{len(raw)}}}".encode("ascii")
-                    return "OK", [(header, raw), b")"]
-            return "NO", [b""]
+            if self.fetch_error is not None:
+                raise self.fetch_error
+            if self.fetch_status != "OK":
+                return self.fetch_status, [b""]
+            requested_uids = str(args[0]).split(",")
+            message_parts = str(args[1])
+            partial_match = re.search(r"BODY\.PEEK\[\]<0\.([0-9]+)>", message_parts)
+            data: list[object] = []
+            for sequence, (uid, raw) in enumerate(self.messages, start=1):
+                if uid not in requested_uids:
+                    continue
+                if sequence in self.malformed_sequences:
+                    data.append((f"{sequence} (UID {uid})".encode("ascii"),))
+                    continue
+                if partial_match is not None:
+                    literal = raw[: int(partial_match.group(1))]
+                    header = (
+                        f"{sequence} (UID {uid} RFC822.SIZE {len(raw)} "
+                        f"BODY[]<0> {{{len(literal)}}}"
+                    ).encode("ascii")
+                else:
+                    literal = raw
+                    header = f"{sequence} (UID {uid} BODY[] {{{len(raw)}}}".encode("ascii")
+                data.extend([(header, literal), b")"])
+            return "OK", data
         raise AssertionError(f"unexpected UID command: {command!r}")
-
-    def fetch(self, message_set: str, message_parts: str) -> tuple[str, list[object]]:
-        self.commands.append(("FETCH", message_set, message_parts))
-        if self.fetch_error is not None:
-            raise self.fetch_error
-        if self.fetch_status != "OK":
-            return self.fetch_status, [b""]
-
-        selected = self._messages_for_set(message_set)
-        partial_match = re.search(r"BODY\.PEEK\[\]<0\.([0-9]+)>", message_parts)
-        data: list[object] = []
-        for sequence, uid, raw in selected:
-            if sequence in self.malformed_sequences:
-                data.append((f"{sequence} (UID {uid})".encode("ascii"),))
-                continue
-            if partial_match is not None:
-                literal = raw[: int(partial_match.group(1))]
-                header = (
-                    f"{sequence} (UID {uid} RFC822.SIZE {len(raw)} "
-                    f"BODY[]<0> {{{len(literal)}}}"
-                ).encode("ascii")
-            else:
-                literal = raw
-                header = f"{sequence} (UID {uid} BODY[] {{{len(raw)}}}".encode("ascii")
-            data.append((header, literal))
-            data.append(b")")
-        return "OK", data
-
-    def _messages_for_set(self, message_set: str) -> list[tuple[int, str, bytes]]:
-        if message_set.endswith(":*"):
-            start = int(message_set[:-2])
-            end = len(self.messages)
-        elif ":" in message_set:
-            start_text, end_text = message_set.split(":", 1)
-            start = int(start_text)
-            end = len(self.messages) if end_text == "*" else int(end_text)
-        else:
-            start = end = int(message_set)
-        selected: list[tuple[int, str, bytes]] = []
-        for sequence in range(max(1, start), min(end, len(self.messages)) + 1):
-            uid, raw = self.messages[sequence - 1]
-            selected.append((sequence, uid, raw))
-        return selected
 
 
 class InstrumentedSocket:
@@ -363,6 +355,50 @@ class InstrumentedSocket:
 
 
 class FetchMessagesInstrumentedTests(unittest.TestCase):
+    def test_fetch_messages_uses_one_uid_fetch_for_last_non_contiguous_uids(self) -> None:
+        InstrumentedIMAP.reset(count=0)
+        InstrumentedIMAP.messages = [
+            ("2", _raw_message("2")),
+            ("7", _raw_message("7")),
+            ("20", _raw_message("20")),
+            ("42", _raw_message("42")),
+        ]
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            records = fetch_messages(_account(), limit=2)
+
+        client = InstrumentedIMAP.instances[0]
+        self.assertEqual([record.uid for record in records], ["20", "42"])
+        self.assertIn(("UID", "SEARCH", None, "ALL"), client.commands)
+        self.assertIn(("UID", "FETCH", "20,42", "(UID BODY.PEEK[])"), client.commands)
+        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "FETCH")), 1)
+        self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 0)
+
+    def test_uid_fetch_silently_ignores_uid_expunged_after_search(self) -> None:
+        InstrumentedIMAP.reset(count=0)
+        InstrumentedIMAP.messages = [
+            ("10", _raw_message("10")),
+            ("20", _raw_message("20")),
+            ("30", _raw_message("30")),
+            ("40", _raw_message("40")),
+        ]
+        InstrumentedIMAP.expunge_uid_after_search = "30"
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            records = fetch_messages(_account(), limit=2)
+
+        client = InstrumentedIMAP.instances[0]
+        self.assertEqual([record.uid for record in records], ["40"])
+        self.assertIn(("UID", "FETCH", "30,40", "(UID BODY.PEEK[])"), client.commands)
+        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "FETCH")), 1)
+        self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 0)
+
     def test_fetch_messages_attaches_uidvalidity_from_imaplib_response(self) -> None:
         InstrumentedIMAP.reset(count=2, uidvalidity=b" 98765 ")
 
@@ -502,7 +538,7 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
 
         self.assertEqual(InstrumentedIMAP.instances, [])
 
-    def test_fetch_messages_uses_one_readonly_batch_fetch_for_recent_messages(self) -> None:
+    def test_fetch_messages_uses_one_readonly_uid_batch_fetch_for_recent_messages(self) -> None:
         InstrumentedIMAP.reset(count=1000)
 
         with patch(
@@ -515,10 +551,11 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         self.assertEqual([record.uid for record in records], ["999", "1000"])
         self.assertTrue(all(record.raw_message_complete for record in records))
         self.assertIn(("SELECT", "INBOX", True), client.commands)
-        self.assertIn(("FETCH", "999:*", "(UID BODY.PEEK[])"), client.commands)
-        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "SEARCH")), 0)
-        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "FETCH")), 0)
-        self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 1)
+        self.assertIn(("UID", "SEARCH", None, "ALL"), client.commands)
+        self.assertIn(("UID", "FETCH", "999,1000", "(UID BODY.PEEK[])"), client.commands)
+        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "SEARCH")), 1)
+        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "FETCH")), 1)
+        self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 0)
 
     def test_fetch_messages_can_use_partial_raw_fetch_for_preview_mode(self) -> None:
         InstrumentedIMAP.reset(count=1000)
@@ -533,11 +570,16 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         self.assertEqual([record.uid for record in records], ["996", "997", "998", "999", "1000"])
         self.assertTrue(all(record.raw_message_complete for record in records))
         self.assertIn(
-            ("FETCH", "996:*", "(UID RFC822.SIZE BODY.PEEK[]<0.16384>)"),
+            (
+                "UID",
+                "FETCH",
+                "996,997,998,999,1000",
+                "(UID RFC822.SIZE BODY.PEEK[]<0.16384>)",
+            ),
             client.commands,
         )
-        self.assertNotIn(("FETCH", "996:*", "(UID BODY.PEEK[])"), client.commands)
-        self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 1)
+        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "FETCH")), 1)
+        self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 0)
 
     def test_fetch_messages_marks_partial_raw_messages_by_rfc822_size(self) -> None:
         short_raw = _raw_message("short")
@@ -558,7 +600,7 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         self.assertEqual(records[1].raw_message, long_raw[:max_bytes])
         self.assertFalse(records[1].raw_message_complete)
         self.assertIn(
-            ("FETCH", "1:*", f"(UID RFC822.SIZE BODY.PEEK[]<0.{max_bytes}>)"),
+            ("UID", "FETCH", "1,2", f"(UID RFC822.SIZE BODY.PEEK[]<0.{max_bytes}>)"),
             client.commands,
         )
 
@@ -597,7 +639,7 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         self.assertEqual(diagnostics.raw_bytes, 0)
         self.assertEqual(diagnostics.message_count, 0)
 
-    def test_fetch_messages_empty_mailbox_skips_search_and_fetch(self) -> None:
+    def test_fetch_messages_empty_uid_search_skips_fetch(self) -> None:
         InstrumentedIMAP.reset(count=0)
 
         with patch(
@@ -611,6 +653,7 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
         self.assertEqual(client.commands, [
             ("AUTHENTICATE", "XOAUTH2", b"user=user@outlook.com\x01auth=Bearer access-token\x01\x01"),
             ("SELECT", "INBOX", True),
+            ("UID", "SEARCH", None, "ALL"),
         ])
 
     def test_fetch_messages_limit_larger_than_mailbox_uses_one_batch_fetch(self) -> None:
@@ -624,8 +667,39 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
 
         client = InstrumentedIMAP.instances[0]
         self.assertEqual([record.uid for record in records], ["1", "2"])
-        self.assertIn(("FETCH", "1:*", "(UID BODY.PEEK[])"), client.commands)
-        self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 1)
+        self.assertIn(("UID", "FETCH", "1,2", "(UID BODY.PEEK[])"), client.commands)
+        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "FETCH")), 1)
+        self.assertEqual(sum(1 for command in client.commands if command[0] == "FETCH"), 0)
+
+    def test_fetch_messages_uid_search_status_failure_is_readable(self) -> None:
+        InstrumentedIMAP.reset(count=2)
+        InstrumentedIMAP.search_status = "NO"
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            with self.assertRaises(ImapReceiveError) as raised:
+                fetch_messages(_account(), limit=2)
+
+        self.assertIn("failed to search message UIDs", str(raised.exception))
+        self.assertIn("NO", str(raised.exception))
+        client = InstrumentedIMAP.instances[0]
+        self.assertEqual(sum(1 for command in client.commands if command[:2] == ("UID", "FETCH")), 0)
+
+    def test_fetch_messages_uid_search_exception_is_readable(self) -> None:
+        InstrumentedIMAP.reset(count=2)
+        InstrumentedIMAP.search_error = OSError("search connection lost")
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            with self.assertRaises(ImapReceiveError) as raised:
+                fetch_messages(_account(), limit=2)
+
+        self.assertIn("search message UIDs failed", str(raised.exception))
+        self.assertIn("search connection lost", str(raised.exception))
 
     def test_fetch_messages_batch_fetch_failure_is_readable(self) -> None:
         InstrumentedIMAP.reset(count=2)
@@ -638,8 +712,22 @@ class FetchMessagesInstrumentedTests(unittest.TestCase):
             with self.assertRaises(ImapReceiveError) as raised:
                 fetch_messages(_account(), limit=2)
 
-        self.assertIn("failed to fetch messages", str(raised.exception))
+        self.assertIn("failed to fetch message UIDs", str(raised.exception))
         self.assertIn("NO", str(raised.exception))
+
+    def test_fetch_messages_uid_fetch_exception_is_readable(self) -> None:
+        InstrumentedIMAP.reset(count=2)
+        InstrumentedIMAP.fetch_error = OSError("fetch connection lost")
+
+        with patch(
+            "mail_receiver.imap_client.refresh_access_token",
+            return_value=SimpleNamespace(access_token="access-token"),
+        ), patch("mail_receiver.imap_client.imaplib.IMAP4_SSL", InstrumentedIMAP):
+            with self.assertRaises(ImapReceiveError) as raised:
+                fetch_messages(_account(), limit=2)
+
+        self.assertIn("fetch message UIDs 1,2 failed", str(raised.exception))
+        self.assertIn("fetch connection lost", str(raised.exception))
 
     def test_fetch_messages_single_malformed_message_is_readable(self) -> None:
         InstrumentedIMAP.reset(count=2)
