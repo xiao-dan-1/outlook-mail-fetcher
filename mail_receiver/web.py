@@ -296,8 +296,6 @@ def elapsed_ms(started_at: float) -> int:
 
 def classify_error(message: str) -> str:
     lowered = message.lower()
-    if "connect to" in lowered or "connection" in lowered or "network is unreachable" in lowered:
-        return "connect"
     if "authenticate" in lowered or "authenticated" in lowered or "xoauth2" in lowered:
         return "auth"
     if "token" in lowered or "oauth" in lowered or "refresh" in lowered:
@@ -306,6 +304,8 @@ def classify_error(message: str) -> str:
         return "select"
     if "fetch messages" in lowered or "failed to fetch" in lowered:
         return "fetch"
+    if "connect to" in lowered or "connection" in lowered or "network is unreachable" in lowered:
+        return "connect"
     if "imap" in lowered:
         return "connect"
     return "unknown"

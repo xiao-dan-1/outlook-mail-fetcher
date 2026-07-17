@@ -813,6 +813,20 @@ class WebServiceTests(unittest.TestCase):
                 self.assertEqual(data["failed"], 1)
                 self.assertEqual(data["rows"][0]["stage"], expected_stage)
 
+    def test_error_classification_prefers_specific_stage_over_connection_words(self) -> None:
+        cases = {
+            "authenticate with XOAUTH2 connection reset": "auth",
+            "token refresh network error: connection refused": "oauth",
+            "oauth endpoint connection reset": "oauth",
+            "select mailbox connection reset": "select",
+            "failed to fetch messages: connection reset": "fetch",
+            "connect to outlook.office365.com:993 failed": "connect",
+        }
+
+        for message, expected_stage in cases.items():
+            with self.subTest(message=message):
+                self.assertEqual(web.classify_error(message), expected_stage)
+
     def test_fetch_uses_partial_preview_fetch_by_default(self) -> None:
         with TemporaryDirectory() as directory:
             config = WebConfig(account_file=Path(directory) / "missing.txt")
