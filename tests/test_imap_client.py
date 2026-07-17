@@ -60,6 +60,32 @@ class ImapClientTests(unittest.TestCase):
             ],
         )
 
+    def test_byte_only_fetch_response_does_not_supply_previous_literal_uid(self) -> None:
+        data = [
+            (b"1 (BODY[]<0> {3}", b"abc"),
+            b")",
+            b"2 (UID 43 RFC822.SIZE 3 FLAGS (\\Seen))",
+        ]
+
+        with self.assertRaises(ImapReceiveError) as raised:
+            list(_iter_fetch_messages(data, is_partial=True))
+
+        self.assertEqual(
+            str(raised.exception),
+            "IMAP FETCH response item did not include UID",
+        )
+
+    def test_byte_only_fetch_response_does_not_set_previous_literal_size(self) -> None:
+        data = [
+            (b"1 (UID 42 BODY[]<0> {3}", b"abc"),
+            b")",
+            b"2 (UID 43 RFC822.SIZE 3 FLAGS (\\Seen))",
+        ]
+
+        payloads = list(_iter_fetch_messages(data, is_partial=True))
+
+        self.assertEqual(payloads, [("42", b"abc", False)])
+
     def test_email_record_from_message_extracts_headers_and_body(self) -> None:
         raw = (
             b"Message-ID: <abc@example>\r\n"

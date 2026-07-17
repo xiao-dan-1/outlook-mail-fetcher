@@ -24,6 +24,7 @@ DEFAULT_IMAP_PORT = 993
 DEFAULT_IMAP_TIMEOUT = 30
 FETCH_MESSAGE_PARTS = "(UID BODY.PEEK[])"
 FETCH_UID_RE = re.compile(rb"\bUID\s+([0-9]+)\b")
+FETCH_RESPONSE_START_RE = re.compile(rb"^\s*[0-9]+\s+\(")
 RFC822_SIZE_RE = re.compile(rb"\bRFC822\.SIZE\s+([0-9]+)(?=\s|\))", re.IGNORECASE)
 UIDVALIDITY_RE = re.compile(rb"\bUIDVALIDITY\s+([0-9]+)\b", re.IGNORECASE)
 T = TypeVar("T")
@@ -483,6 +484,16 @@ def _iter_fetch_messages(
             trailer_metadata = []
             continue
         if pending_item is not None:
+            item_metadata = _metadata_bytes(item)
+            if item_metadata is not None and FETCH_RESPONSE_START_RE.match(item_metadata):
+                yield _parse_fetch_item(
+                    pending_item,
+                    trailer_metadata=trailer_metadata,
+                    is_partial=is_partial,
+                )
+                pending_item = None
+                trailer_metadata = []
+                continue
             trailer_metadata.append(item)
     if pending_item is not None:
         yield _parse_fetch_item(
