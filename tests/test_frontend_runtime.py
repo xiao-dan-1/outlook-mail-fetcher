@@ -33,6 +33,9 @@ class FrontendRuntimeTests(unittest.TestCase):
     def test_message_selection_runtime(self) -> None:
         self.assert_node_test_passes("tests/frontend_message_selection.test.js")
 
+    def test_mail_list_aria_runtime(self) -> None:
+        self.assert_node_test_passes("tests/frontend_mail_list_aria_runtime.test.js")
+
     def test_theme_runtime(self) -> None:
         self.assert_node_test_passes("tests/frontend_theme_runtime.test.js")
 

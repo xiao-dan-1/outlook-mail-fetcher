@@ -1188,6 +1188,18 @@ function setMailBusyState(isBusy) {
   }
 }
 
+function syncMailListSemantics(isPopulated) {
+  el.mailList.removeAttribute("aria-activedescendant");
+  if (isPopulated) {
+    el.mailList.setAttribute("role", "listbox");
+    el.mailList.setAttribute("aria-label", "邮件列表");
+    return;
+  }
+  state.selectedMessageKey = null;
+  el.mailList.removeAttribute("role");
+  el.mailList.removeAttribute("aria-label");
+}
+
 function mailSkeletonRowMarkup(tone = "") {
   return `
     <div class="mail-skeleton-row ${tone}" aria-hidden="true">
@@ -1263,9 +1275,8 @@ function mailErrorActionsMarkup() {
 function renderMailLoadingState(label) {
   renderMailSummary([], { kind: "loading", label });
   setMailBusyState(true);
-  state.selectedMessageKey = null;
+  syncMailListSemantics(false);
   el.mailList.classList.remove("empty");
-  el.mailList.removeAttribute("aria-activedescendant");
   el.mailList.innerHTML = `
     <div class="mail-loading-state" role="status" aria-live="polite" aria-busy="true" aria-label="${escapeHtml(label)}">
       <div class="mail-loading-header">
@@ -1331,9 +1342,8 @@ function renderMailErrorState(message) {
   const insight = failureInsight(detail);
   setMailBusyState(false);
   renderMailSummary([], { kind: "error", label: insight.title, description: `${insight.summary} ${insight.nextStep}` });
-  state.selectedMessageKey = null;
+  syncMailListSemantics(false);
   el.mailList.classList.add("empty");
-  el.mailList.removeAttribute("aria-activedescendant");
   el.mailList.innerHTML = `
     <div class="mail-error-state mail-error-compact" role="status" aria-label="邮件拉取失败">
       <div class="mail-error-compact-card">
@@ -1653,13 +1663,10 @@ function renderMailSummary(results, options = {}) {
 function renderResults(results) {
   setMailBusyState(false);
   el.mailList.innerHTML = "";
-  el.mailList.setAttribute("role", "listbox");
-  el.mailList.setAttribute("aria-label", "邮件列表");
-  el.mailList.removeAttribute("aria-activedescendant");
+  syncMailListSemantics(Boolean(results.length));
   el.mailList.classList.toggle("empty", !results.length);
   renderMailSummary(results);
   if (!results.length) {
-    state.selectedMessageKey = null;
     renderMailDetailPlaceholder();
     el.mailList.innerHTML = mailListEmptyMarkup();
     syncSessionActions();
