@@ -17,18 +17,34 @@ from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
 from .storage import DEFAULT_DB_PATH, MailStore
 
 
+def _add_common_options(
+    parser: argparse.ArgumentParser,
+    *,
+    suppress_defaults: bool = False,
+) -> None:
+    db_default = argparse.SUPPRESS if suppress_defaults else str(DEFAULT_DB_PATH)
+    parser.add_argument("--db", default=db_default, help="SQLite database path.")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=argparse.SUPPRESS if suppress_defaults else False,
+        help="Enable verbose debug logging.",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Receive Outlook mail into a local searchable store.")
     parser.add_argument("--version", action="version", version=f"Outlook Mail Fetcher {__version__}")
-    parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="SQLite database path.")
-    parser.add_argument("--debug", action="store_true", help="Enable verbose debug logging.")
+    _add_common_options(parser)
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     inspect_parser = subparsers.add_parser("inspect-accounts", help="Parse and validate account file.")
+    _add_common_options(inspect_parser, suppress_defaults=True)
     inspect_parser.add_argument("account_file", help="Account file path.")
 
     fetch_parser = subparsers.add_parser("fetch", help="Fetch mail into local SQLite store.")
+    _add_common_options(fetch_parser, suppress_defaults=True)
     fetch_parser.add_argument("account_file", help="Account file path.")
     fetch_parser.add_argument("--mailbox", default="INBOX", help="Mailbox name.")
     fetch_parser.add_argument("--limit", type=int, default=20, help="Messages per account.")
@@ -47,11 +63,13 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_parser.add_argument("--token-timeout", type=int, default=30, help="OAuth2 timeout seconds.")
 
     search_parser = subparsers.add_parser("search", help="Search local stored mail.")
+    _add_common_options(search_parser, suppress_defaults=True)
     search_parser.add_argument("--query", "-q", required=True, help="Keyword to search.")
     search_parser.add_argument("--account", help="Only search one account.")
     search_parser.add_argument("--limit", type=int, default=20, help="Maximum result count.")
 
     show_parser = subparsers.add_parser("show", help="Show one stored mail by id.")
+    _add_common_options(show_parser, suppress_defaults=True)
     show_parser.add_argument("email_id", type=int, help="Stored email id.")
     show_parser.add_argument("--raw", action="store_true", help="Print raw RFC822 message.")
 
