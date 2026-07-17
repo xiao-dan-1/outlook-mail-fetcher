@@ -1,7 +1,10 @@
 from pathlib import Path
 from contextlib import redirect_stderr, redirect_stdout
 import io
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -10,7 +13,12 @@ from mail_receiver.imap_client import EmailRecord
 from mail_receiver.storage import DEFAULT_DB_PATH, MailStore
 
 
-def _record(*, uid: str = "1", subject: str = "Needle") -> EmailRecord:
+def _record(
+    *,
+    uid: str = "1",
+    subject: str = "Needle",
+    raw_message: bytes = b"raw",
+) -> EmailRecord:
     return EmailRecord(
         account_email="user@outlook.com",
         mailbox="INBOX",
@@ -22,7 +30,7 @@ def _record(*, uid: str = "1", subject: str = "Needle") -> EmailRecord:
         recipients="user@outlook.com",
         sent_at=None,
         body_preview="needle",
-        raw_message=b"raw",
+        raw_message=raw_message,
     )
 
 
@@ -349,6 +357,95 @@ class CliFetchTests(unittest.TestCase):
             self.assertEqual(result, 0)
             self.assertTrue(database.is_file())
             self.assertEqual(MailStore(database).count(), 1)
+
+
+class CliRawOutputTests(unittest.TestCase):
+    RAW_MESSAGE = b"\xff\x00header\r\nbody\n\x80trailing-byte-without-lf"
+
+    def _create_database(self, database: Path) -> int:
+        store = MailStore(database)
+        store.initialize()
+        self.assertEqual(
+            store.save_many([_record(raw_message=self.RAW_MESSAGE)]),
+            1,
+        )
+        return store.search("Needle", limit=1)[0].id
+
+    def _run_show_raw(self, arguments: list[str]) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(
+            [sys.executable, "-m", "mail_receiver.cli", *arguments],
+            cwd=Path(__file__).resolve().parents[1],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    def test_show_raw_subprocess_preserves_bytes_with_trailing_db(self) -> None:
+        with TemporaryDirectory() as directory:
+            database = Path(directory) / "mail.sqlite3"
+            email_id = self._create_database(database)
+
+            completed = self._run_show_raw(
+                ["show", str(email_id), "--raw", "--db", str(database)]
+            )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, self.RAW_MESSAGE)
+        self.assertEqual(completed.stderr, b"")
+
+    def test_show_raw_subprocess_preserves_bytes_with_leading_db(self) -> None:
+        with TemporaryDirectory() as directory:
+            database = Path(directory) / "mail.sqlite3"
+            email_id = self._create_database(database)
+
+            completed = self._run_show_raw(
+                ["--db", str(database), "show", str(email_id), "--raw"]
+            )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, self.RAW_MESSAGE)
+        self.assertEqual(completed.stderr, b"")
+
+    def test_show_raw_supports_a_binary_stdout_without_buffer_attribute(self) -> None:
+        with TemporaryDirectory() as directory:
+            database = Path(directory) / "mail.sqlite3"
+            email_id = self._create_database(database)
+            output = io.BytesIO()
+
+            with patch.object(cli.sys, "stdout", output):
+                result = cli.show(
+                    SimpleNamespace(db=str(database), email_id=email_id, raw=True)
+                )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(output.getvalue(), self.RAW_MESSAGE)
+
+    def test_show_raw_keeps_missing_message_exit_behavior(self) -> None:
+        with TemporaryDirectory() as directory:
+            database = Path(directory) / "mail.sqlite3"
+            MailStore(database).initialize()
+
+            completed = self._run_show_raw(
+                ["show", "999", "--raw", "--db", str(database)]
+            )
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(completed.stdout, b"")
+        self.assertEqual(completed.stderr.decode().strip(), "email not found: 999")
+
+    def test_show_non_raw_still_supports_text_stdout_without_buffer(self) -> None:
+        with TemporaryDirectory() as directory:
+            database = Path(directory) / "mail.sqlite3"
+            email_id = self._create_database(database)
+            output = io.StringIO()
+
+            with redirect_stdout(output):
+                result = cli.show(
+                    SimpleNamespace(db=str(database), email_id=email_id, raw=False)
+                )
+
+        self.assertEqual(result, 0)
+        self.assertIn("subject: Needle", output.getvalue())
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 from . import __version__
@@ -15,6 +16,65 @@ from .imap_client import (
 )
 from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
 from .storage import DEFAULT_DB_PATH, MailStore
+
+
+def _set_binary_mode(file_descriptor: int) -> None:
+    if os.name != "nt":
+        return
+
+    import msvcrt
+
+    msvcrt.setmode(file_descriptor, os.O_BINARY)
+
+
+def _stream_fileno(stream: object) -> int | None:
+    try:
+        return stream.fileno()  # type: ignore[attr-defined, no-any-return]
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _write_all_to_stream(stream: object, raw: bytes) -> None:
+    remaining = memoryview(raw)
+    while remaining:
+        written = stream.write(remaining)  # type: ignore[attr-defined]
+        if written is None or written <= 0:
+            raise OSError("binary stdout did not accept the complete raw message")
+        remaining = remaining[written:]
+    stream.flush()  # type: ignore[attr-defined]
+
+
+def _write_all_to_descriptor(file_descriptor: int, raw: bytes) -> None:
+    remaining = memoryview(raw)
+    while remaining:
+        written = os.write(file_descriptor, remaining)
+        if written <= 0:
+            raise OSError("stdout did not accept the complete raw message")
+        remaining = remaining[written:]
+
+
+def _write_raw_stdout(raw: bytes) -> None:
+    stdout = sys.stdout
+    binary_stdout = getattr(stdout, "buffer", None)
+    if binary_stdout is not None:
+        stdout.flush()
+        file_descriptor = _stream_fileno(binary_stdout)
+        if file_descriptor is not None:
+            _set_binary_mode(file_descriptor)
+        _write_all_to_stream(binary_stdout, raw)
+        return
+
+    file_descriptor = _stream_fileno(stdout)
+    if file_descriptor is not None:
+        stdout.flush()
+        _set_binary_mode(file_descriptor)
+        _write_all_to_descriptor(file_descriptor, raw)
+        return
+
+    try:
+        _write_all_to_stream(stdout, raw)
+    except TypeError as exc:
+        raise RuntimeError("raw output requires a binary stdout") from exc
 
 
 def _non_negative_int(value: str) -> int:
@@ -216,7 +276,7 @@ def show(args: argparse.Namespace) -> int:
         if raw is None:
             print(f"email not found: {args.email_id}", file=sys.stderr)
             return 1
-        print(raw.decode("utf-8", errors="replace"))
+        _write_raw_stdout(raw)
         return 0
 
     email = store.get(args.email_id)
