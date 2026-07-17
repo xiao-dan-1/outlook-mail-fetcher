@@ -100,14 +100,23 @@ function applyTheme(theme) {
 }
 
 function initTheme() {
-  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  let savedTheme = null;
+  try {
+    savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    savedTheme = null;
+  }
   applyTheme(savedTheme || "light");
 }
 
 function toggleTheme() {
   const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   const nextTheme = currentTheme === "dark" ? "light" : "dark";
-  localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  } catch {
+    // The active theme remains usable when browser storage is unavailable.
+  }
   applyTheme(nextTheme);
 }
 
