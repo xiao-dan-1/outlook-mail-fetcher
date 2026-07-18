@@ -7,6 +7,7 @@ import sys
 
 from . import __version__
 from .accounts import AccountFormatError, load_accounts
+from .application import AccountFetchOptions, BatchFetchService
 from .imap_client import (
     DEFAULT_IMAP_HOST,
     DEFAULT_IMAP_PORT,
@@ -14,6 +15,7 @@ from .imap_client import (
     fetch_messages,
     mock_messages,
 )
+from .mail_fetching import MockAccountMailFetcher, OutlookAccountMailFetcher
 from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
 from .output import visible_text
 from .storage import DEFAULT_DB_PATH, MailStore
@@ -211,9 +213,6 @@ def fetch(args: argparse.Namespace) -> int:
     store = MailStore(args.db)
     store.initialize()
 
-    total_seen = 0
-    total_inserted = 0
-    failures: list[tuple[str, str]] = []
     for account in accounts:
         logging.info(
             "fetching %s mailbox=%s limit=%s",
@@ -221,42 +220,46 @@ def fetch(args: argparse.Namespace) -> int:
             visible_text(args.mailbox),
             args.limit,
         )
-        try:
-            records = (
-                mock_messages(account, mailbox=args.mailbox, limit=args.limit)
-                if args.mock
-                else fetch_messages(
-                    account,
-                    mailbox=args.mailbox,
-                    limit=args.limit,
-                    host=args.imap_host,
-                    port=args.imap_port,
-                    imap_timeout=args.imap_timeout,
-                    token_endpoint=args.token_endpoint,
-                    scope=args.scope,
-                    token_timeout=args.token_timeout,
-                    debug=args.debug,
-                )
-            )
-            inserted = store.save_many(records)
-            total_seen += len(records)
-            total_inserted += inserted
+
+    options = AccountFetchOptions(
+        mailbox=args.mailbox,
+        limit=args.limit,
+        host=args.imap_host,
+        port=args.imap_port,
+        imap_timeout=args.imap_timeout,
+        token_endpoint=args.token_endpoint,
+        scope=args.scope,
+        token_timeout=args.token_timeout,
+        debug=args.debug,
+    )
+    fetcher = (
+        MockAccountMailFetcher(fetch_function=mock_messages)
+        if args.mock
+        else OutlookAccountMailFetcher(fetch_function=fetch_messages)
+    )
+    batch = BatchFetchService(fetcher, repository=store).fetch_accounts(
+        accounts,
+        options,
+        stop_on_error=args.stop_on_error,
+    )
+
+    failures: list[tuple[str, str]] = []
+    for result in batch.account_results:
+        if result.is_success:
             print(
-                f"{visible_text(account.email)}: "
-                f"fetched={len(records)} inserted={inserted}"
+                f"{visible_text(result.account.email)}: "
+                f"fetched={len(result.messages)} inserted={result.saved_count}"
             )
-        except Exception as exc:
-            message = str(exc)
-            failures.append((account.email, message))
+        else:
+            message = result.error or "unknown error"
+            failures.append((result.account.email, message))
             print(
-                f"{visible_text(account.email)}: failed={visible_text(message)}",
+                f"{visible_text(result.account.email)}: failed={visible_text(message)}",
                 file=sys.stderr,
             )
-            if args.stop_on_error:
-                raise
 
     print(
-        f"done: accounts={len(accounts)} fetched={total_seen} inserted={total_inserted} "
+        f"done: accounts={len(accounts)} fetched={batch.total_fetched} inserted={batch.total_saved} "
         f"failed={len(failures)} db={visible_text(store.path)}"
     )
     if failures:

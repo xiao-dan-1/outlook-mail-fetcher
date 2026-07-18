@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import imaplib
 import logging
@@ -11,6 +11,7 @@ from time import perf_counter
 from typing import Callable, Iterable, TypeVar
 
 from .accounts import Account
+from .application import FetchDiagnostics
 from .message_parsing import (
     DefaultMessageParser,
     EmailRecord,
@@ -49,13 +50,6 @@ class AccountCheckResult:
 class MailboxSelection:
     message_count: int
     uidvalidity: str
-
-
-@dataclass
-class FetchDiagnostics:
-    timings: dict[str, int] = field(default_factory=dict)
-    raw_bytes: int = 0
-    message_count: int = 0
 
 
 @dataclass(frozen=True)

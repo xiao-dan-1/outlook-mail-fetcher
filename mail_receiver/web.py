@@ -5,7 +5,6 @@ import base64
 from dataclasses import dataclass
 import json
 import logging
-import re
 import socket
 import traceback
 from http import HTTPStatus
@@ -17,14 +16,20 @@ from urllib.parse import parse_qs, urlparse
 
 from . import __version__
 from .accounts import Account, AccountFormatError, load_accounts, parse_accounts
+from .application import (
+    AccountFetchOptions,
+    BatchFetchService,
+    FetchDiagnostics,
+    classify_fetch_error,
+)
 from .imap_client import (
     DEFAULT_IMAP_HOST,
     DEFAULT_IMAP_PORT,
-    FetchDiagnostics,
     check_account,
     fetch_messages,
     mock_messages,
 )
+from .mail_fetching import MockAccountMailFetcher, OutlookAccountMailFetcher
 from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
 from .output import visible_text
 
@@ -163,80 +168,72 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
     if selected_account:
         accounts = filter_accounts(accounts, selected_account)
 
+    options = AccountFetchOptions(
+        mailbox=mailbox,
+        limit=limit,
+        max_bytes=max_bytes,
+        host=str(payload.get("imap_host") or DEFAULT_IMAP_HOST),
+        port=imap_port,
+        imap_timeout=imap_timeout,
+        token_endpoint=str(payload.get("token_endpoint") or TOKEN_ENDPOINT),
+        scope=str(payload.get("scope") or DEFAULT_SCOPE),
+        token_timeout=token_timeout,
+        debug=False,
+    )
+    fetcher = (
+        MockAccountMailFetcher(fetch_function=mock_messages)
+        if use_mock
+        else OutlookAccountMailFetcher(fetch_function=fetch_messages)
+    )
+    batch = BatchFetchService(fetcher).fetch_accounts(
+        accounts,
+        options,
+        stop_on_error=stop_on_error,
+    )
+
     rows: list[dict[str, Any]] = []
     messages: list[dict[str, Any]] = []
-    total_fetched = 0
-    failed = 0
     next_id = 1
 
-    for account in accounts:
-        account_started_at = perf_counter()
-        diagnostics = FetchDiagnostics()
-        try:
-            if use_mock:
-                mock_started_at = perf_counter()
-                records = mock_messages(account, mailbox=mailbox, limit=limit)
-                diagnostics.timings["fetch_ms"] = elapsed_ms(mock_started_at)
-                diagnostics.timings["parse_ms"] = 0
-                diagnostics.raw_bytes = sum(len(record.raw_message) for record in records)
-                diagnostics.message_count = len(records)
-            else:
-                records = fetch_messages(
-                    account,
-                    mailbox=mailbox,
-                    limit=limit,
-                    max_bytes=max_bytes,
-                    host=str(payload.get("imap_host") or DEFAULT_IMAP_HOST),
-                    port=imap_port,
-                    imap_timeout=imap_timeout,
-                    token_endpoint=str(payload.get("token_endpoint") or TOKEN_ENDPOINT),
-                    scope=str(payload.get("scope") or DEFAULT_SCOPE),
-                    token_timeout=token_timeout,
-                    debug=False,
-                    diagnostics=diagnostics,
-                )
-            total_fetched += len(records)
-            for record in records:
+    for result in batch.account_results:
+        if result.is_success:
+            for record in result.messages:
                 messages.append(email_record_to_dict(record, next_id=next_id, include_raw=include_raw))
                 next_id += 1
             rows.append(
                 {
-                    "email": account.email,
+                    "email": result.account.email,
                     "ok": True,
-                    "fetched": len(records),
-                    "elapsed_ms": elapsed_ms(account_started_at),
+                    "fetched": len(result.messages),
+                    "elapsed_ms": result.elapsed_ms,
                     "error": None,
-                    **fetch_diagnostics_to_dict(diagnostics),
+                    **fetch_diagnostics_to_dict(result.diagnostics),
                 }
             )
-        except Exception as exc:
-            failed += 1
-            error = str(exc)
+        else:
             rows.append(
                 {
-                    "email": account.email,
+                    "email": result.account.email,
                     "ok": False,
-                    "stage": classify_error(error),
+                    "stage": result.stage,
                     "fetched": 0,
-                    "elapsed_ms": elapsed_ms(account_started_at),
-                    "error": error,
-                    **fetch_diagnostics_to_dict(diagnostics),
+                    "elapsed_ms": result.elapsed_ms,
+                    "error": result.error,
+                    **fetch_diagnostics_to_dict(result.diagnostics),
                 }
             )
             LOGGER.info(
                 "fetch failed for %s: %s",
-                visible_text(account.email),
-                visible_text(error),
+                visible_text(result.account.email),
+                visible_text(result.error or ""),
             )
-            if stop_on_error:
-                break
 
     account_file = resolve_account_file(payload, config)
     return {
         "account_file": str(account_file) if account_file else None,
         "accounts": len(accounts),
-        "fetched": total_fetched,
-        "failed": failed,
+        "fetched": batch.total_fetched,
+        "failed": batch.failed_count,
         "rows": rows,
         "messages": messages,
     }
@@ -302,30 +299,7 @@ def elapsed_ms(started_at: float) -> int:
 
 
 def classify_error(message: str) -> str:
-    lowered = message.lower()
-    if "authenticate" in lowered or "authenticated" in lowered or "xoauth2" in lowered:
-        return "auth"
-    if "token" in lowered or "oauth" in lowered or "refresh" in lowered:
-        return "oauth"
-    if "select mailbox" in lowered or "failed to select mailbox" in lowered or "mailbox" in lowered:
-        return "select"
-    if (
-        "fetch messages" in lowered
-        or "failed to fetch" in lowered
-        or lowered.startswith("failed to search message uids:")
-        or lowered.startswith("search message uids failed:")
-        or lowered == "search message uids timed out"
-        or re.match(
-            r"fetch message uids \d+(?:,\d+)* (?:failed:|timed out$)",
-            lowered,
-        ) is not None
-    ):
-        return "fetch"
-    if "connect to" in lowered or "connection" in lowered or "network is unreachable" in lowered:
-        return "connect"
-    if "imap" in lowered:
-        return "connect"
-    return "unknown"
+    return classify_fetch_error(message)
 
 
 def account_to_dict(account: Account) -> dict[str, Any]:
