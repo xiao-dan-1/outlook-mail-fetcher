@@ -4,9 +4,36 @@ from time import perf_counter
 from typing import Callable
 
 from .accounts import Account
-from .application import AccountFetchOptions, FetchDiagnostics
-from .imap_client import fetch_messages, mock_messages
+from .application import (
+    AccountCheckOptions,
+    AccountFetchOptions,
+    FetchDiagnostics,
+    MailboxCheck,
+)
+from .imap_client import check_account, fetch_messages, mock_messages
 from .message_parsing import EmailRecord
+
+
+class OutlookAccountMailboxChecker:
+    def __init__(self, check_function: Callable | None = None) -> None:
+        self._check_function = check_function or check_account
+
+    def check(self, account: Account, options: AccountCheckOptions) -> MailboxCheck:
+        result = self._check_function(
+            account,
+            mailbox=options.mailbox,
+            host=options.host,
+            port=options.port,
+            imap_timeout=options.imap_timeout,
+            token_endpoint=options.token_endpoint,
+            scope=options.scope,
+            token_timeout=options.token_timeout,
+            debug=options.debug,
+        )
+        return MailboxCheck(
+            mailbox=result.mailbox,
+            message_count=result.message_count,
+        )
 
 
 class OutlookAccountMailFetcher:
@@ -58,4 +85,8 @@ class MockAccountMailFetcher:
         return records
 
 
-__all__ = ["MockAccountMailFetcher", "OutlookAccountMailFetcher"]
+__all__ = [
+    "MockAccountMailFetcher",
+    "OutlookAccountMailboxChecker",
+    "OutlookAccountMailFetcher",
+]

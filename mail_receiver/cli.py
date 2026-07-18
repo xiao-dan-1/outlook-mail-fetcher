@@ -234,14 +234,6 @@ def fetch(args: argparse.Namespace) -> int:
     store = SQLiteMailRepository(args.db)
     store.initialize()
 
-    for account in accounts:
-        logging.info(
-            "fetching %s mailbox=%s limit=%s",
-            visible_text(account.email),
-            visible_text(args.mailbox),
-            args.limit,
-        )
-
     options = AccountFetchOptions(
         mailbox=args.mailbox,
         limit=args.limit,
@@ -272,14 +264,14 @@ def fetch(args: argparse.Namespace) -> int:
     for result in batch.account_results:
         if result.is_success:
             print(
-                f"{visible_text(result.account.email)}: "
+                f"{visible_text(result.account_email)}: "
                 f"fetched={len(result.messages)} inserted={result.saved_count}"
             )
         else:
             message = result.error or "unknown error"
-            failures.append((result.account.email, message))
+            failures.append((result.account_email, message))
             print(
-                f"{visible_text(result.account.email)}: failed={visible_text(message)}",
+                f"{visible_text(result.account_email)}: failed={visible_text(message)}",
                 file=sys.stderr,
             )
 

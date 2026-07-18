@@ -546,7 +546,7 @@ class CliVisibleOutputTests(unittest.TestCase):
         self.assertNotIn("\x1b", output.getvalue())
         self.assertNotIn("\x00", output.getvalue())
 
-    def test_fetch_escapes_accounts_mailbox_errors_database_path_and_log_arguments(self) -> None:
+    def test_fetch_escapes_output_without_prefetch_account_logs(self) -> None:
         good = Account("good\r\nforged\x1b@example.com", "p", "c", "r", 1)
         bad = Account("bad\x00\u2028@example.com", "p", "c", "r", 2)
         mailbox = "INBOX\tname\x1b"
@@ -600,24 +600,7 @@ class CliVisibleOutputTests(unittest.TestCase):
         self.assertEqual(error.getvalue().count("connect\\r\\nforged\\x1b[31m\\x00\\u2028"), 2)
         self.assertNotIn("\x1b", output.getvalue() + error.getvalue())
         self.assertNotIn("\x00", output.getvalue() + error.getvalue())
-        self.assertEqual(
-            info.call_args_list[0].args,
-            (
-                "fetching %s mailbox=%s limit=%s",
-                "good\\r\\nforged\\x1b@example.com",
-                "INBOX\\tname\\x1b",
-                1,
-            ),
-        )
-        self.assertEqual(
-            info.call_args_list[1].args,
-            (
-                "fetching %s mailbox=%s limit=%s",
-                "bad\\x00\\u2028@example.com",
-                "INBOX\\tname\\x1b",
-                1,
-            ),
-        )
+        info.assert_not_called()
 
     def test_fetch_escapes_requested_account_when_it_is_not_found(self) -> None:
         requested = "missing\r\nforged\x1b\x00\u2028@example.com"

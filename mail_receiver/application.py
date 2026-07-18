@@ -15,6 +15,92 @@ MAX_ACCOUNT_FETCH_WORKERS = 16
 
 
 @dataclass(frozen=True)
+class AccountCheckOptions:
+    mailbox: str = "INBOX"
+    host: str = "outlook.office365.com"
+    port: int = 993
+    token_endpoint: str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
+    scope: str = "https://outlook.office.com/IMAP.AccessAsUser.All offline_access"
+    token_timeout: int = 30
+    imap_timeout: int | float | None = 30
+    debug: bool = False
+
+
+@dataclass(frozen=True)
+class MailboxCheck:
+    mailbox: str
+    message_count: int | None
+
+
+class AccountMailboxChecker(Protocol):
+    def check(self, account: Account, options: AccountCheckOptions) -> MailboxCheck:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class CheckAccountResult:
+    account_email: str
+    source_line: int
+    mailbox: str
+    message_count: int | None
+    is_success: bool
+    error: str | None = None
+    stage: str = "imap"
+
+
+@dataclass(frozen=True)
+class BatchCheckResult:
+    account_results: list[CheckAccountResult]
+
+    @property
+    def ok_count(self) -> int:
+        return sum(result.is_success for result in self.account_results)
+
+    @property
+    def failed_count(self) -> int:
+        return sum(not result.is_success for result in self.account_results)
+
+
+class BatchCheckService:
+    def __init__(self, checker: AccountMailboxChecker) -> None:
+        self._checker = checker
+
+    def check_accounts(
+        self,
+        accounts: Sequence[Account],
+        options: AccountCheckOptions,
+        *,
+        stop_on_error: bool = False,
+    ) -> BatchCheckResult:
+        account_results: list[CheckAccountResult] = []
+        for account in accounts:
+            try:
+                check = self._checker.check(account, options)
+                result = CheckAccountResult(
+                    account_email=account.email,
+                    source_line=account.source_line,
+                    mailbox=check.mailbox,
+                    message_count=check.message_count,
+                    is_success=True,
+                )
+            except Exception as exc:
+                error = str(exc)
+                result = CheckAccountResult(
+                    account_email=account.email,
+                    source_line=account.source_line,
+                    mailbox=options.mailbox,
+                    message_count=None,
+                    is_success=False,
+                    error=error,
+                    stage=classify_fetch_error(error),
+                )
+            account_results.append(result)
+            if stop_on_error and not result.is_success:
+                break
+        return BatchCheckResult(account_results)
+
+
+@dataclass(frozen=True)
 class AccountFetchOptions:
     mailbox: str = "INBOX"
     limit: int = 20
@@ -47,7 +133,8 @@ class AccountMailFetcher(Protocol):
 
 @dataclass
 class FetchAccountResult:
-    account: Account
+    account_email: str
+    source_line: int
     messages: list[EmailRecord]
     elapsed_ms: int
     diagnostics: FetchDiagnostics
@@ -233,7 +320,8 @@ class BatchFetchService:
         except Exception as exc:
             error = str(exc)
             return FetchAccountResult(
-                account=account,
+                account_email=account.email,
+                source_line=account.source_line,
                 messages=[],
                 elapsed_ms=_elapsed_ms(started_at),
                 diagnostics=diagnostics,
@@ -242,7 +330,8 @@ class BatchFetchService:
                 stage=classify_fetch_error(error),
             )
         return FetchAccountResult(
-            account=account,
+            account_email=account.email,
+            source_line=account.source_line,
             messages=messages,
             elapsed_ms=_elapsed_ms(started_at),
             diagnostics=diagnostics,
@@ -303,12 +392,18 @@ def _elapsed_ms(started_at: float) -> int:
 
 
 __all__ = [
+    "AccountCheckOptions",
     "AccountFetchOptions",
+    "AccountMailboxChecker",
     "AccountMailFetcher",
+    "BatchCheckResult",
+    "BatchCheckService",
     "BatchFetchResult",
     "BatchFetchService",
+    "CheckAccountResult",
     "FetchAccountResult",
     "FetchDiagnostics",
+    "MailboxCheck",
     "MAX_ACCOUNT_FETCH_WORKERS",
     "classify_fetch_error",
 ]

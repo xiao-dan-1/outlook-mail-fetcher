@@ -19,6 +19,14 @@ def imported_modules(path: Path) -> set[str]:
     return modules
 
 
+def function_node(path: Path, name: str) -> ast.FunctionDef:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    raise AssertionError(f"function not found: {name}")
+
+
 class ArchitectureTests(unittest.TestCase):
     def test_architecture_modules_avoid_vague_public_type_names(self) -> None:
         prohibited = {"Manager", "Helper", "Utils", "Processor", "Data"}
@@ -68,6 +76,43 @@ class ArchitectureTests(unittest.TestCase):
                 hasattr(module, "BatchFetchService"),
                 f"{module_name} must compose BatchFetchService",
             )
+
+    def test_entrypoints_do_not_loop_over_accounts_for_batch_business_logic(self) -> None:
+        entrypoints = (
+            (ROOT / "mail_receiver" / "web.py", "check_accounts_data"),
+            (ROOT / "mail_receiver" / "cli.py", "fetch"),
+        )
+
+        for path, function_name in entrypoints:
+            with self.subTest(path=path.name, function=function_name):
+                function = function_node(path, function_name)
+                prohibited = [
+                    node
+                    for node in ast.walk(function)
+                    if isinstance(node, ast.For)
+                    and isinstance(node.target, ast.Name)
+                    and node.target.id == "account"
+                    and isinstance(node.iter, ast.Name)
+                    and node.iter.id == "accounts"
+                ]
+                self.assertEqual(
+                    prohibited,
+                    [],
+                    f"{path.name}:{function_name} must delegate account batches",
+                )
+
+    def test_web_check_composes_batch_check_service(self) -> None:
+        function = function_node(
+            ROOT / "mail_receiver" / "web.py",
+            "check_accounts_data",
+        )
+        called_names = {
+            node.func.id
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+
+        self.assertIn("BatchCheckService", called_names)
 
 
 if __name__ == "__main__":

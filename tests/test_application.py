@@ -1,11 +1,16 @@
+from concurrent.futures import ThreadPoolExecutor as RealThreadPoolExecutor
 import threading
 import unittest
+from unittest.mock import patch
 
 from mail_receiver.accounts import Account
 from mail_receiver.application import (
+    AccountCheckOptions,
     AccountFetchOptions,
+    BatchCheckService,
     BatchFetchService,
     FetchDiagnostics,
+    MailboxCheck,
 )
 from mail_receiver.message_parsing import EmailRecord
 
@@ -66,7 +71,183 @@ class FakeRepository:
         return len(batch)
 
 
+class FakeChecker:
+    def __init__(self, outcomes: dict[str, MailboxCheck | Exception]) -> None:
+        self.outcomes = outcomes
+        self.calls: list[str] = []
+
+    def check(self, account: Account, options: AccountCheckOptions) -> MailboxCheck:
+        self.calls.append(account.email)
+        outcome = self.outcomes[account.email]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class BatchCheckServiceTests(unittest.TestCase):
+    def test_preserves_order_and_isolates_account_failures(self) -> None:
+        accounts = [
+            _account("first@outlook.com", 1),
+            _account("second@outlook.com", 2),
+            _account("third@outlook.com", 3),
+        ]
+        checker = FakeChecker(
+            {
+                accounts[0].email: MailboxCheck(mailbox="INBOX", message_count=4),
+                accounts[1].email: RuntimeError("authenticate with XOAUTH2 failed: NO"),
+                accounts[2].email: MailboxCheck(mailbox="Archive", message_count=7),
+            }
+        )
+
+        result = BatchCheckService(checker).check_accounts(
+            accounts,
+            AccountCheckOptions(mailbox="INBOX"),
+        )
+
+        self.assertEqual(checker.calls, [account.email for account in accounts])
+        self.assertEqual(
+            [row.account_email for row in result.account_results],
+            [account.email for account in accounts],
+        )
+        self.assertEqual([row.source_line for row in result.account_results], [1, 2, 3])
+        self.assertTrue(result.account_results[0].is_success)
+        self.assertFalse(result.account_results[1].is_success)
+        self.assertEqual(result.account_results[1].stage, "auth")
+        self.assertTrue(result.account_results[2].is_success)
+        self.assertEqual(result.ok_count, 2)
+        self.assertEqual(result.failed_count, 1)
+
+    def test_stop_on_error_does_not_check_later_accounts(self) -> None:
+        accounts = [
+            _account("first@outlook.com", 1),
+            _account("second@outlook.com", 2),
+            _account("third@outlook.com", 3),
+        ]
+        checker = FakeChecker(
+            {
+                accounts[0].email: MailboxCheck(mailbox="INBOX", message_count=1),
+                accounts[1].email: RuntimeError("connect to server failed"),
+                accounts[2].email: MailboxCheck(mailbox="INBOX", message_count=3),
+            }
+        )
+
+        result = BatchCheckService(checker).check_accounts(
+            accounts,
+            AccountCheckOptions(mailbox="INBOX"),
+            stop_on_error=True,
+        )
+
+        self.assertEqual(checker.calls, [accounts[0].email, accounts[1].email])
+        self.assertEqual(len(result.account_results), 2)
+        self.assertEqual(result.ok_count, 1)
+        self.assertEqual(result.failed_count, 1)
+
+
 class BatchFetchServiceTests(unittest.TestCase):
+    def test_result_exposes_only_safe_account_identity(self) -> None:
+        account = Account(
+            email="safe-boundary@outlook.com",
+            password="fake-password-not-for-output",
+            client_id="fake-client-id-not-for-output",
+            refresh_token="fake-refresh-token-not-for-output",
+            source_line=9,
+        )
+
+        result = BatchFetchService(
+            FakeFetcher({account.email: []}),
+            max_workers=1,
+        ).fetch_accounts([account], AccountFetchOptions(limit=1)).account_results[0]
+
+        self.assertFalse(hasattr(result, "account"))
+        self.assertEqual(result.account_email, account.email)
+        self.assertEqual(result.source_line, 9)
+        representation = repr(result)
+        self.assertNotIn(account.password, representation)
+        self.assertNotIn(account.client_id, representation)
+        self.assertNotIn(account.refresh_token, representation)
+
+    def test_zero_accounts_returns_empty_result_without_starting_executor(self) -> None:
+        with patch("mail_receiver.application.ThreadPoolExecutor") as executor:
+            result = BatchFetchService(FakeFetcher({})).fetch_accounts(
+                [],
+                AccountFetchOptions(limit=1),
+            )
+
+        self.assertEqual(result.account_results, [])
+        self.assertEqual(result.total_fetched, 0)
+        self.assertEqual(result.total_saved, 0)
+        self.assertEqual(result.failed_count, 0)
+        executor.assert_not_called()
+
+    def test_all_account_failures_are_isolated_and_ordered(self) -> None:
+        accounts = [_account("first@outlook.com", 1), _account("second@outlook.com", 2)]
+
+        result = BatchFetchService(
+            FakeFetcher(
+                {
+                    account.email: RuntimeError(f"failure-{account.source_line}")
+                    for account in accounts
+                }
+            ),
+            max_workers=2,
+        ).fetch_accounts(accounts, AccountFetchOptions(limit=1))
+
+        self.assertEqual(
+            [row.account_email for row in result.account_results],
+            [account.email for account in accounts],
+        )
+        self.assertEqual(result.failed_count, 2)
+        self.assertEqual(result.total_fetched, 0)
+        self.assertTrue(all(not row.is_success for row in result.account_results))
+
+    def test_default_worker_count_is_minimum_of_four_and_account_count(self) -> None:
+        observed_worker_counts: list[int] = []
+
+        def recording_executor(*args, **kwargs):
+            observed_worker_counts.append(kwargs["max_workers"])
+            return RealThreadPoolExecutor(*args, **kwargs)
+
+        with patch(
+            "mail_receiver.application.ThreadPoolExecutor",
+            side_effect=recording_executor,
+        ):
+            for account_count in (3, 5):
+                accounts = [
+                    _account(f"user-{index}@outlook.com", index)
+                    for index in range(1, account_count + 1)
+                ]
+                BatchFetchService(
+                    FakeFetcher({account.email: [] for account in accounts})
+                ).fetch_accounts(accounts, AccountFetchOptions(limit=1))
+
+        self.assertEqual(observed_worker_counts, [3, 4])
+
+    def test_persistence_failure_continues_to_later_success_when_not_stopping(self) -> None:
+        accounts = [_account("first@outlook.com", 1), _account("second@outlook.com", 2)]
+        save_calls: list[str] = []
+
+        class FirstSaveFailsRepository:
+            def save_many(self, records):
+                records = list(records)
+                save_calls.append(records[0].account_email)
+                if len(save_calls) == 1:
+                    raise RuntimeError("database is locked")
+                return len(records)
+
+        result = BatchFetchService(
+            FakeFetcher({account.email: [_record(account.email)] for account in accounts}),
+            repository=FirstSaveFailsRepository(),
+            max_workers=2,
+        ).fetch_accounts(
+            accounts,
+            AccountFetchOptions(limit=1),
+            stop_on_error=False,
+        )
+
+        self.assertEqual(save_calls, [account.email for account in accounts])
+        self.assertEqual(result.failed_count, 1)
+        self.assertEqual(result.account_results[1].saved_count, 1)
+
     def test_sequential_stop_on_persistence_failure_preserves_fetched_messages(self) -> None:
         accounts = [_account("first@outlook.com", 1), _account("second@outlook.com", 2)]
         fetch_calls: list[str] = []
@@ -176,7 +357,7 @@ class BatchFetchServiceTests(unittest.TestCase):
 
         self.assertEqual(completion_order, ["second@outlook.com", "first@outlook.com"])
         self.assertEqual(
-            [row.account.email for row in result.account_results],
+            [row.account_email for row in result.account_results],
             ["first@outlook.com", "second@outlook.com"],
         )
 
@@ -266,7 +447,7 @@ class BatchFetchServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            [row.account.email for row in result.account_results],
+            [row.account_email for row in result.account_results],
             ["first@outlook.com", "second@outlook.com"],
         )
         self.assertTrue(result.account_results[0].is_success)

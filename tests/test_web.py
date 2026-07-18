@@ -14,6 +14,8 @@ import unittest
 from unittest.mock import patch
 
 from mail_receiver import web
+from mail_receiver.accounts import Account
+from mail_receiver.application import AccountCheckOptions
 from mail_receiver.imap_client import AccountCheckResult, EmailRecord
 from mail_receiver.web import (
     WebConfig,
@@ -794,6 +796,47 @@ class WebServiceTests(unittest.TestCase):
             self.assertEqual(data["ok"], 1)
             self.assertEqual(seen_kwargs["imap_timeout"], 8)
             self.assertEqual(seen_kwargs["token_timeout"], 8)
+
+    def test_outlook_mailbox_checker_maps_core_check_result(self) -> None:
+        from mail_receiver.mail_fetching import OutlookAccountMailboxChecker
+
+        account = Account(
+            email="adapter@outlook.com",
+            password="fake-password",
+            client_id="fake-client",
+            refresh_token="fake-refresh",
+            source_line=4,
+        )
+        seen_kwargs = {}
+
+        def fake_check(_account, **kwargs):
+            seen_kwargs.update(kwargs)
+            return AccountCheckResult(
+                account_email=account.email,
+                mailbox="Archive",
+                message_count=12,
+            )
+
+        result = OutlookAccountMailboxChecker(fake_check).check(
+            account,
+            AccountCheckOptions(
+                mailbox="Archive",
+                host="imap.example.test",
+                port=1993,
+                imap_timeout=6,
+                token_endpoint="https://example.test/token",
+                scope="scope",
+                token_timeout=7,
+                debug=True,
+            ),
+        )
+
+        self.assertEqual(result.mailbox, "Archive")
+        self.assertEqual(result.message_count, 12)
+        self.assertEqual(seen_kwargs["host"], "imap.example.test")
+        self.assertEqual(seen_kwargs["imap_timeout"], 6)
+        self.assertEqual(seen_kwargs["token_timeout"], 7)
+        self.assertTrue(seen_kwargs["debug"])
 
     def test_fetch_passes_imap_timeout_to_core_client(self) -> None:
         with TemporaryDirectory() as directory:

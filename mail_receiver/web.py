@@ -18,7 +18,9 @@ from . import __version__
 from .accounts import Account, AccountFormatError, load_accounts, parse_accounts
 from .application import (
     MAX_ACCOUNT_FETCH_WORKERS,
+    AccountCheckOptions,
     AccountFetchOptions,
+    BatchCheckService,
     BatchFetchService,
     FetchDiagnostics,
     classify_fetch_error,
@@ -30,7 +32,11 @@ from .imap_client import (
     fetch_messages,
     mock_messages,
 )
-from .mail_fetching import MockAccountMailFetcher, OutlookAccountMailFetcher
+from .mail_fetching import (
+    MockAccountMailFetcher,
+    OutlookAccountMailboxChecker,
+    OutlookAccountMailFetcher,
+)
 from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
 from .output import visible_text
 
@@ -101,52 +107,39 @@ def check_accounts_data(payload: dict[str, Any], config: WebConfig) -> dict[str,
     if selected_account:
         accounts = filter_accounts(accounts, selected_account)
 
-    rows: list[dict[str, Any]] = []
-    ok_count = 0
-    failed = 0
-    for account in accounts:
-        try:
-            result = check_account(
-                account,
-                mailbox=mailbox,
-                host=str(payload.get("imap_host") or DEFAULT_IMAP_HOST),
-                port=imap_port,
-                imap_timeout=imap_timeout,
-                token_endpoint=str(payload.get("token_endpoint") or TOKEN_ENDPOINT),
-                scope=str(payload.get("scope") or DEFAULT_SCOPE),
-                token_timeout=token_timeout,
-                debug=False,
-            )
-            ok_count += 1
-            rows.append(
-                {
-                    "email": account.email,
-                    "ok": True,
-                    "stage": "imap",
-                    "mailbox": result.mailbox,
-                    "message_count": result.message_count,
-                    "error": None,
-                }
-            )
-        except Exception as exc:
-            failed += 1
-            rows.append(
-                {
-                    "email": account.email,
-                    "ok": False,
-                    "stage": classify_error(str(exc)),
-                    "mailbox": mailbox,
-                    "message_count": None,
-                    "error": str(exc),
-                }
-            )
-            if stop_on_error:
-                break
+    options = AccountCheckOptions(
+        mailbox=mailbox,
+        host=str(payload.get("imap_host") or DEFAULT_IMAP_HOST),
+        port=imap_port,
+        imap_timeout=imap_timeout,
+        token_endpoint=str(payload.get("token_endpoint") or TOKEN_ENDPOINT),
+        scope=str(payload.get("scope") or DEFAULT_SCOPE),
+        token_timeout=token_timeout,
+        debug=False,
+    )
+    batch = BatchCheckService(
+        OutlookAccountMailboxChecker(check_function=check_account)
+    ).check_accounts(
+        accounts,
+        options,
+        stop_on_error=stop_on_error,
+    )
+    rows = [
+        {
+            "email": result.account_email,
+            "ok": result.is_success,
+            "stage": result.stage,
+            "mailbox": result.mailbox,
+            "message_count": result.message_count,
+            "error": result.error,
+        }
+        for result in batch.account_results
+    ]
 
     return {
         "accounts": len(accounts),
-        "ok": ok_count,
-        "failed": failed,
+        "ok": batch.ok_count,
+        "failed": batch.failed_count,
         "rows": rows,
     }
 
@@ -210,7 +203,7 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
                 next_id += 1
             rows.append(
                 {
-                    "email": result.account.email,
+                    "email": result.account_email,
                     "ok": True,
                     "fetched": len(result.messages),
                     "elapsed_ms": result.elapsed_ms,
@@ -221,7 +214,7 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
         else:
             rows.append(
                 {
-                    "email": result.account.email,
+                    "email": result.account_email,
                     "ok": False,
                     "stage": result.stage,
                     "fetched": 0,
@@ -232,7 +225,7 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
             )
             LOGGER.info(
                 "fetch failed for %s: %s",
-                visible_text(result.account.email),
+                visible_text(result.account_email),
                 visible_text(result.error or ""),
             )
 
