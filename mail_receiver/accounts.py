@@ -86,6 +86,18 @@ def parse_accounts(lines: Iterable[str]) -> list[Account]:
     return accounts
 
 
+def filter_accounts_by_email(
+    accounts: Iterable[Account],
+    selected_email: str,
+) -> list[Account]:
+    normalized_email = selected_email.lower()
+    return [
+        account
+        for account in accounts
+        if account.email.lower() == normalized_email
+    ]
+
+
 def load_accounts(path: str | Path) -> list[Account]:
     account_path = Path(path)
     with account_path.open("r", encoding="utf-8-sig") as handle:

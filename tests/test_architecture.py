@@ -7,6 +7,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+ACCOUNT_BATCH_WRAPPERS = {"list", "tuple", "iter", "enumerate", "reversed", "sorted"}
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -43,7 +44,121 @@ def function_node(path: Path, name: str) -> ast.FunctionDef:
     raise AssertionError(f"function not found: {name}")
 
 
+def account_batch_loops(function: ast.FunctionDef) -> list[ast.AST]:
+    nodes = list(_function_body_nodes(function))
+    tainted_names = {"accounts"}
+    changed = True
+    while changed:
+        changed = False
+        for node in nodes:
+            assigned_names: set[str] = set()
+            value: ast.expr | None = None
+            if isinstance(node, ast.Assign):
+                value = node.value
+                for target in node.targets:
+                    assigned_names.update(_target_names(target))
+            elif isinstance(node, ast.AnnAssign):
+                value = node.value
+                assigned_names.update(_target_names(node.target))
+            if value is None or not _is_account_batch(value, tainted_names):
+                continue
+            new_names = assigned_names - tainted_names
+            if new_names:
+                tainted_names.update(new_names)
+                changed = True
+
+    prohibited: list[ast.AST] = []
+    for node in nodes:
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            if _is_account_batch(node.iter, tainted_names):
+                prohibited.append(node)
+        elif isinstance(node, ast.comprehension):
+            if _is_account_batch(node.iter, tainted_names):
+                prohibited.append(node)
+    return prohibited
+
+
+def _function_body_nodes(function: ast.FunctionDef) -> list[ast.AST]:
+    nodes: list[ast.AST] = []
+
+    def visit(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(
+                child,
+                (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda),
+            ):
+                continue
+            nodes.append(child)
+            visit(child)
+
+    visit(function)
+    return nodes
+
+
+def _target_names(target: ast.AST) -> set[str]:
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: set[str] = set()
+        for element in target.elts:
+            names.update(_target_names(element))
+        return names
+    return set()
+
+
+def _is_account_batch(node: ast.AST, tainted_names: set[str]) -> bool:
+    if isinstance(node, ast.Name):
+        return node.id in tainted_names
+    if not isinstance(node, ast.Call):
+        return False
+    if (
+        isinstance(node.func, ast.Name)
+        and node.func.id in ACCOUNT_BATCH_WRAPPERS
+        and node.args
+    ):
+        return _is_account_batch(node.args[0], tainted_names)
+    if (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "copy"
+        and not node.args
+    ):
+        return _is_account_batch(node.func.value, tainted_names)
+    return False
+
+
 class ArchitectureTests(unittest.TestCase):
+    def test_account_batch_loop_detection_catches_aliases_wrappers_and_comprehensions(self) -> None:
+        sources = (
+            (
+                "list comprehension alias",
+                "def entry(accounts):\n"
+                "    alias = list(accounts)\n"
+                "    return [mailbox for mailbox in alias]\n",
+            ),
+            (
+                "enumerated loop alias",
+                "def entry(accounts):\n"
+                "    pending = accounts\n"
+                "    for mailbox in enumerate(pending):\n"
+                "        pass\n",
+            ),
+        )
+
+        for name, source in sources:
+            with self.subTest(name=name):
+                function = ast.parse(source).body[0]
+                self.assertEqual(len(account_batch_loops(function)), 1)
+
+    def test_account_batch_loop_detection_does_not_taint_batch_service_results(self) -> None:
+        function = ast.parse(
+            "def entry(accounts, service):\n"
+            "    results = service.fetch_accounts(accounts)\n"
+            "    for result in results:\n"
+            "        pass\n"
+        ).body[0]
+
+        self.assertEqual(account_batch_loops(function), [])
+
     def test_imported_modules_normalizes_relative_imports_to_package_names(self) -> None:
         with NamedTemporaryFile(
             mode="w",
@@ -120,15 +235,7 @@ class ArchitectureTests(unittest.TestCase):
         for path, function_name in entrypoints:
             with self.subTest(path=path.name, function=function_name):
                 function = function_node(path, function_name)
-                prohibited = [
-                    node
-                    for node in ast.walk(function)
-                    if isinstance(node, ast.For)
-                    and isinstance(node.target, ast.Name)
-                    and node.target.id == "account"
-                    and isinstance(node.iter, ast.Name)
-                    and node.iter.id == "accounts"
-                ]
+                prohibited = account_batch_loops(function)
                 self.assertEqual(
                     prohibited,
                     [],

@@ -6,7 +6,7 @@ import os
 import sys
 
 from . import __version__
-from .accounts import AccountFormatError, load_accounts
+from .accounts import AccountFormatError, filter_accounts_by_email, load_accounts
 from .application import (
     MAX_ACCOUNT_FETCH_WORKERS,
     AccountFetchOptions,
@@ -226,7 +226,7 @@ def inspect_accounts(account_file: str) -> int:
 def fetch(args: argparse.Namespace) -> int:
     accounts = load_accounts(args.account_file)
     if args.account:
-        accounts = [account for account in accounts if account.email.lower() == args.account.lower()]
+        accounts = filter_accounts_by_email(accounts, args.account)
         if not accounts:
             print(f"account not found: {visible_text(args.account)}", file=sys.stderr)
             return 1

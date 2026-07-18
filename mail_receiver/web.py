@@ -15,7 +15,13 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__
-from .accounts import Account, AccountFormatError, load_accounts, parse_accounts
+from .accounts import (
+    Account,
+    AccountFormatError,
+    filter_accounts_by_email,
+    load_accounts,
+    parse_accounts,
+)
 from .application import (
     MAX_ACCOUNT_FETCH_WORKERS,
     AccountCheckOptions,
@@ -267,11 +273,7 @@ def resolve_account_file(payload: dict[str, Any], config: WebConfig) -> Path | N
 
 
 def filter_accounts(accounts: list[Account], selected_account: str) -> list[Account]:
-    selected = [
-        account
-        for account in accounts
-        if account.email.lower() == selected_account.lower()
-    ]
+    selected = filter_accounts_by_email(accounts, selected_account)
     if not selected:
         raise NotFoundError(f"account not found: {selected_account}")
     return selected
