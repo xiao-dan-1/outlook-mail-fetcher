@@ -902,7 +902,12 @@ class WebServiceTests(unittest.TestCase):
             "oauth endpoint connection reset": "oauth",
             "select mailbox connection reset": "select",
             "failed to fetch messages: connection reset": "fetch",
+            "failed to search message UIDs: NO": "fetch",
+            "search message UIDs failed: connection reset": "fetch",
+            "fetch message UIDs 1,2 failed: connection reset": "fetch",
             "connect to outlook.office365.com:993 failed": "connect",
+            "message UIDs connection reset": "connect",
+            "message UIDs were malformed": "unknown",
         }
 
         for message, expected_stage in cases.items():

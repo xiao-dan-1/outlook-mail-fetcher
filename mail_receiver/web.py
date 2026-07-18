@@ -5,6 +5,7 @@ import base64
 from dataclasses import dataclass
 import json
 import logging
+import re
 import socket
 import traceback
 from http import HTTPStatus
@@ -308,7 +309,13 @@ def classify_error(message: str) -> str:
         return "oauth"
     if "select mailbox" in lowered or "failed to select mailbox" in lowered or "mailbox" in lowered:
         return "select"
-    if "fetch messages" in lowered or "failed to fetch" in lowered:
+    if (
+        "fetch messages" in lowered
+        or "failed to fetch" in lowered
+        or lowered.startswith("failed to search message uids:")
+        or lowered.startswith("search message uids failed:")
+        or re.match(r"fetch message uids \d+(?:,\d+)* failed:", lowered) is not None
+    ):
         return "fetch"
     if "connect to" in lowered or "connection" in lowered or "network is unreachable" in lowered:
         return "connect"
