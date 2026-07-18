@@ -314,7 +314,11 @@ def classify_error(message: str) -> str:
         or "failed to fetch" in lowered
         or lowered.startswith("failed to search message uids:")
         or lowered.startswith("search message uids failed:")
-        or re.match(r"fetch message uids \d+(?:,\d+)* failed:", lowered) is not None
+        or lowered == "search message uids timed out"
+        or re.match(
+            r"fetch message uids \d+(?:,\d+)* (?:failed:|timed out$)",
+            lowered,
+        ) is not None
     ):
         return "fetch"
     if "connect to" in lowered or "connection" in lowered or "network is unreachable" in lowered:

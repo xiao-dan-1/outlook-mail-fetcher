@@ -904,10 +904,13 @@ class WebServiceTests(unittest.TestCase):
             "failed to fetch messages: connection reset": "fetch",
             "failed to search message UIDs: NO": "fetch",
             "search message UIDs failed: connection reset": "fetch",
+            "search message UIDs timed out": "fetch",
             "fetch message UIDs 1,2 failed: connection reset": "fetch",
+            "fetch message UIDs 1,2 timed out": "fetch",
             "connect to outlook.office365.com:993 failed": "connect",
             "message UIDs connection reset": "connect",
             "message UIDs were malformed": "unknown",
+            "message UIDs timed out": "unknown",
         }
 
         for message, expected_stage in cases.items():
