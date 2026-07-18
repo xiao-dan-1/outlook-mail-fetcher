@@ -7,4 +7,5 @@ __pycache__/
 order_*.txt
 .test-mail-store/
 .agents/
+.worktrees/
 docs/superpowers/
