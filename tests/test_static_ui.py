@@ -232,7 +232,19 @@ class StaticUiTests(unittest.TestCase):
 
         self.assertIn("identityPatterns", js)
         self.assertIn("function providerMatchesText(provider, text)", js)
-        self.assertIn("provider.identityPatterns?.length && !providerMatchesText(provider, text)", js)
+        self.assertIn(
+            "function verificationIdentityText(mail, searchText = verificationSearchText(mail))",
+            js,
+        )
+        self.assertIn("return [mail.sender, mail.recipients, searchText]", js)
+        self.assertIn(
+            "function providerVerificationCandidate(provider, text, identityText = text)",
+            js,
+        )
+        self.assertIn(
+            "provider.identityPatterns?.length && !providerMatchesText(provider, identityText)",
+            js,
+        )
         self.assertIn('identityPatterns: [/x\\.ai/i, /xai/i, /grok/i]', js)
 
     def test_fetch_and_retry_share_an_owner_gate_for_busy_cleanup(self) -> None:

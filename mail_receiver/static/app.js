@@ -312,14 +312,19 @@ function readableMailText(mail) {
 function verificationSearchText(mail) {
   return [
     mail.subject,
-    mail.sender,
-    mail.recipients,
     mail.body_preview,
     mail.snippet,
     mail.preview,
     readableMailPreview(mail),
     readableMailText(mail),
   ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function verificationIdentityText(mail, searchText = verificationSearchText(mail)) {
+  return [mail.sender, mail.recipients, searchText]
     .map((value) => String(value || "").trim())
     .filter(Boolean)
     .join("\n");
@@ -386,8 +391,8 @@ function codeCandidateFromRule(provider, rule, windowInfo) {
   };
 }
 
-function providerVerificationCandidate(provider, text) {
-  if (provider.identityPatterns?.length && !providerMatchesText(provider, text)) {
+function providerVerificationCandidate(provider, text, identityText = text) {
+  if (provider.identityPatterns?.length && !providerMatchesText(provider, identityText)) {
     return null;
   }
 
@@ -423,8 +428,9 @@ function extractVerificationCode(mail) {
     };
   }
 
+  const identityText = verificationIdentityText(mail, text);
   for (const provider of VERIFICATION_PROVIDERS) {
-    const candidate = providerVerificationCandidate(provider, text);
+    const candidate = providerVerificationCandidate(provider, text, identityText);
     if (candidate) {
       return candidate;
     }
