@@ -129,7 +129,7 @@ python -m mail_receiver.cli fetch accounts.txt --account user@outlook.com --limi
 - 日志和界面只展示脱敏后的账号信息。
 
 ## Development
-当前版本：`0.1.2`。更新记录写在 [CHANGELOG.md](CHANGELOG.md)。发布版本：`git tag v0.1.2 && git push origin v0.1.2`，GitHub Actions 会发布同名 GHCR 镜像。应用运行时仍仅依赖 Python 标准库；本地 `unittest` discovery 检测到 Node.js 时会执行前端行为测试。CI 使用 Python 3.11 和 Node.js 22，测试通过后才构建或发布 Docker 镜像。
+当前版本：`0.1.3`。更新记录写在 [CHANGELOG.md](CHANGELOG.md)。发布前先将待发布提交合并到 `main`；测试通过后依次执行 `git push origin main`、`git tag -a v0.1.3 -m "Release v0.1.3"`、`git push origin v0.1.3`，GitHub Actions 会发布同名 GHCR 镜像。应用运行时仍仅依赖 Python 标准库；本地 `unittest` discovery 检测到 Node.js 时会执行前端行为测试。CI 使用 Python 3.11 和 Node.js 22，测试通过后才构建或发布 Docker 镜像。
 
 ```powershell
 python -m unittest discover -s tests

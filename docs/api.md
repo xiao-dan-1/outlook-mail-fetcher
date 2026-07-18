@@ -67,7 +67,7 @@ email----password----client_id----refresh_token
 
 ```json
 {
-  "version": "0.1.2",
+  "version": "0.1.3",
   "account_file": null,
   "defaults": {
     "mailbox": "INBOX",

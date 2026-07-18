@@ -8,6 +8,8 @@ import mail_receiver
 
 
 ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_VERSION = "0.1.3"
+EXPECTED_RELEASE_DATE = "2026-07-18"
 
 
 class ProjectMetadataTests(unittest.TestCase):
@@ -33,6 +35,7 @@ class ProjectMetadataTests(unittest.TestCase):
 
         self.assertIsNotNone(version)
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+        self.assertEqual(version, EXPECTED_VERSION)
 
         init_file = self.read_root_file("mail_receiver/__init__.py")
         self.assertIn("__version__", init_file)
@@ -41,8 +44,12 @@ class ProjectMetadataTests(unittest.TestCase):
         readme = self.read_root_file("README.md")
 
         self.assertRegex(readme, re.compile(r"当前版本：`\d+\.\d+\.\d+`"))
+        self.assertIn(f"当前版本：`{EXPECTED_VERSION}`", readme)
         self.assertIn("[CHANGELOG.md](CHANGELOG.md)", readme)
-        self.assertIn("git tag v", readme)
+        self.assertIn(f"git tag -a v{EXPECTED_VERSION}", readme)
+        self.assertIn("先将待发布提交合并到 `main`", readme)
+        self.assertIn("git push origin main", readme)
+        self.assertIn(f"git push origin v{EXPECTED_VERSION}", readme)
         self.assertIn("GHCR", readme)
 
     def test_changelog_documents_current_version(self) -> None:
@@ -50,7 +57,12 @@ class ProjectMetadataTests(unittest.TestCase):
         version = getattr(mail_receiver, "__version__", "")
 
         self.assertIn("# Changelog", changelog)
-        self.assertIn(f"## [{version}] - 2026-07-12", changelog)
+        self.assertIn(f"## [{version}] - {EXPECTED_RELEASE_DATE}", changelog)
+        self.assertIn("raw_message_base64", changelog)
+        self.assertIn("验证码", changelog)
+        self.assertIn("GitHub Actions", changelog)
+        self.assertIn("保留 ID 最小", changelog)
+        self.assertIn("JSON `null`", changelog)
         self.assertIn("xAI/Grok", changelog)
         self.assertIn("docs/api.md", changelog)
 
@@ -70,6 +82,7 @@ class ProjectMetadataTests(unittest.TestCase):
         self.assertIn("account_text", api_doc)
         self.assertIn("include_raw", api_doc)
         self.assertIn("错误响应", api_doc)
+        self.assertIn(f'"version": "{EXPECTED_VERSION}"', api_doc)
 
     def test_readme_has_concise_public_project_structure(self) -> None:
         readme = self.read_root_file("README.md")
