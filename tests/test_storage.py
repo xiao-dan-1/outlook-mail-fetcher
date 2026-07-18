@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
+import mail_receiver.storage as storage_module
 from mail_receiver.imap_client import EmailRecord
 from mail_receiver.storage import MailStore, SQLiteMailRepository
 
@@ -163,6 +164,13 @@ def _storage_snapshot(db_path: Path) -> tuple[object, ...]:
 
 
 class StorageTests(unittest.TestCase):
+    def test_storage_module_publishes_explicit_and_compatibility_names(self) -> None:
+        self.assertTrue(
+            {"DEFAULT_DB_PATH", "MailStore", "SQLiteMailRepository"}.issubset(
+                set(storage_module.__all__)
+            )
+        )
+
     def test_explicit_sqlite_repository_name_keeps_mail_store_compatibility(self) -> None:
         self.assertIs(SQLiteMailRepository, MailStore)
 

@@ -375,3 +375,11 @@ def _row_to_stored_email(row: sqlite3.Row) -> StoredEmail:
         sent_at=row["sent_at"],
         body_preview=str(row["body_preview"]),
     )
+
+
+__all__ = [
+    "DEFAULT_DB_PATH",
+    "MailStore",
+    "SQLiteMailRepository",
+    "StoredEmail",
+]

@@ -67,6 +67,68 @@ class FakeRepository:
 
 
 class BatchFetchServiceTests(unittest.TestCase):
+    def test_sequential_stop_on_persistence_failure_preserves_fetched_messages(self) -> None:
+        accounts = [_account("first@outlook.com", 1), _account("second@outlook.com", 2)]
+        fetch_calls: list[str] = []
+
+        class RecordingFetcher:
+            def fetch(self, account, options, diagnostics):
+                fetch_calls.append(account.email)
+                return [_record(account.email)]
+
+        class FailingRepository:
+            def save_many(self, records):
+                raise RuntimeError("database is locked")
+
+        result = BatchFetchService(
+            RecordingFetcher(),
+            repository=FailingRepository(),
+            max_workers=1,
+        ).fetch_accounts(
+            accounts,
+            AccountFetchOptions(limit=1),
+            stop_on_error=True,
+        )
+
+        self.assertEqual(fetch_calls, ["first@outlook.com"])
+        self.assertEqual(len(result.account_results), 1)
+        self.assertEqual(len(result.account_results[0].messages), 1)
+        self.assertFalse(result.account_results[0].is_success)
+        self.assertEqual(result.account_results[0].stage, "storage")
+        self.assertEqual(result.total_fetched, 1)
+        self.assertEqual(result.total_saved, 0)
+
+    def test_concurrent_stop_on_persistence_failure_skips_later_saves(self) -> None:
+        accounts = [_account("first@outlook.com", 1), _account("second@outlook.com", 2)]
+        save_calls: list[str] = []
+
+        class SuccessfulFetcher:
+            def fetch(self, account, options, diagnostics):
+                return [_record(account.email)]
+
+        class FirstSaveFailsRepository:
+            def save_many(self, records):
+                records = list(records)
+                save_calls.append(records[0].account_email)
+                raise RuntimeError("database is locked")
+
+        result = BatchFetchService(
+            SuccessfulFetcher(),
+            repository=FirstSaveFailsRepository(),
+            max_workers=2,
+        ).fetch_accounts(
+            accounts,
+            AccountFetchOptions(limit=1),
+            stop_on_error=True,
+        )
+
+        self.assertEqual(save_calls, ["first@outlook.com"])
+        self.assertEqual(result.total_fetched, 2)
+        self.assertEqual(result.total_saved, 0)
+        self.assertEqual(result.failed_count, 2)
+        self.assertTrue(all(row.messages for row in result.account_results))
+        self.assertTrue(all(row.stage == "storage" for row in result.account_results))
+
     def test_fetches_multiple_accounts_on_overlapping_worker_threads(self) -> None:
         accounts = [_account("first@outlook.com", 1), _account("second@outlook.com", 2)]
         barrier = threading.Barrier(2, timeout=2)

@@ -63,11 +63,11 @@ class BatchFetchResult:
 
     @property
     def total_fetched(self) -> int:
-        return sum(len(result.messages) for result in self.account_results if result.is_success)
+        return sum(len(result.messages) for result in self.account_results)
 
     @property
     def total_saved(self) -> int:
-        return sum(result.saved_count for result in self.account_results if result.is_success)
+        return sum(result.saved_count for result in self.account_results)
 
     @property
     def failed_count(self) -> int:
@@ -116,11 +116,11 @@ class BatchFetchService:
                 stop_on_error=stop_on_error,
             )
 
-        if self._repository is not None:
-            account_results = [
-                self._save_result(result) if result.is_success else result
-                for result in account_results
-            ]
+        if worker_count > 1 and self._repository is not None:
+            account_results = self._persist_results(
+                account_results,
+                stop_on_error=stop_on_error,
+            )
         return BatchFetchResult(account_results)
 
     def _resolve_worker_count(self, account_count: int) -> int:
@@ -139,6 +139,8 @@ class BatchFetchService:
         account_results: list[FetchAccountResult] = []
         for account in accounts:
             result = self._fetch_account(account, options)
+            if result.is_success and self._repository is not None:
+                result = self._save_result(result)
             account_results.append(result)
             if stop_on_error and not result.is_success:
                 break
@@ -198,6 +200,27 @@ class BatchFetchService:
 
         return [completed[index] for index in sorted(completed)]
 
+    def _persist_results(
+        self,
+        results: Sequence[FetchAccountResult],
+        *,
+        stop_on_error: bool,
+    ) -> list[FetchAccountResult]:
+        persisted_results: list[FetchAccountResult] = []
+        persistence_stopped = False
+        for result in results:
+            if not result.is_success:
+                persisted_results.append(result)
+                continue
+            if persistence_stopped:
+                persisted_results.append(self._skip_persistence(result))
+                continue
+            persisted = self._save_result(result)
+            persisted_results.append(persisted)
+            if stop_on_error and persisted.stage == "storage":
+                persistence_stopped = True
+        return persisted_results
+
     def _fetch_account(
         self,
         account: Account,
@@ -234,10 +257,16 @@ class BatchFetchService:
             result.saved_count = repository.save_many(result.messages)
         except Exception as exc:
             error = str(exc)
-            result.messages = []
             result.is_success = False
             result.error = error
-            result.stage = classify_fetch_error(error)
+            result.stage = "storage"
+        return result
+
+    @staticmethod
+    def _skip_persistence(result: FetchAccountResult) -> FetchAccountResult:
+        result.is_success = False
+        result.error = "persistence skipped after an earlier storage failure"
+        result.stage = "storage"
         return result
 
 
