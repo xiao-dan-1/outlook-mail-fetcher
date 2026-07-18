@@ -51,13 +51,14 @@ email----password----client_id----refresh_token
 | `account` | string | 否 | 无 | 只处理指定邮箱 |
 | `mailbox` | string | 否 | `INBOX` | IMAP 邮箱目录 |
 | `limit` | integer | 否 | fetch 为 `20`，前端默认 `1` | 每个账号最多拉取的邮件数，范围 `0..100` |
+| `max_workers` | integer | 否 | `min(4, 账号数)` | 同时拉取账号的 worker 数，范围 `1..16`；只影响 `/api/fetch` |
 | `imap_host` | string | 否 | `outlook.office365.com` | IMAP 主机 |
 | `imap_port` | integer | 否 | `993` | IMAP SSL 端口 |
 | `imap_timeout` | integer | 否 | `8` | IMAP 超时时间，秒 |
 | `token_endpoint` | string | 否 | Microsoft OAuth token endpoint | OAuth2 token endpoint |
 | `token_timeout` | integer | 否 | `8` | OAuth2 请求超时时间，秒 |
 | `scope` | string | 否 | Outlook IMAP scope | OAuth2 refresh scope |
-| `stop_on_error` | boolean | 否 | `false` | 遇到单个账号失败后是否停止 |
+| `stop_on_error` | boolean | 否 | `false` | 遇到单个账号失败后停止调度新账号；已开始的账号会正常结束 |
 
 ## GET /api/config
 
@@ -75,7 +76,7 @@ email----password----client_id----refresh_token
     "imap_host": "outlook.office365.com",
     "imap_port": 993,
     "imap_timeout": 8,
-    "token_endpoint": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    "token_endpoint": "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
     "token_timeout": 8,
     "scope": "https://outlook.office.com/IMAP.AccessAsUser.All offline_access"
   }
@@ -198,6 +199,7 @@ email----password----client_id----refresh_token
   "mailbox": "INBOX",
   "limit": 1,
   "account": "user@outlook.com",
+  "max_workers": 4,
   "include_raw": false,
   "mock": false,
   "stop_on_error": false
@@ -210,6 +212,7 @@ email----password----client_id----refresh_token
 | --- | --- | --- |
 | `include_raw` | boolean | `true` 时返回 `raw_message` 可读文本视图和 `raw_message_base64` 无损字节表示，同时不限制预览下载大小 |
 | `mock` | boolean | `true` 时使用本地模拟邮件，不连接 Outlook |
+| `max_workers` | integer | 多账号请求的有界并发数，范围 `1..16`；省略时最多同时处理 4 个账号 |
 
 ### Response
 

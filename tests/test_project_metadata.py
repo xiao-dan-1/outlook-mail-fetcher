@@ -81,6 +81,8 @@ class ProjectMetadataTests(unittest.TestCase):
                 self.assertIn(endpoint, api_doc)
         self.assertIn("account_text", api_doc)
         self.assertIn("include_raw", api_doc)
+        self.assertIn("max_workers", api_doc)
+        self.assertIn("1..16", api_doc)
         self.assertIn("错误响应", api_doc)
         self.assertIn(f'"version": "{EXPECTED_VERSION}"', api_doc)
 

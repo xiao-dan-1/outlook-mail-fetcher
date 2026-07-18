@@ -7,7 +7,11 @@ import sys
 
 from . import __version__
 from .accounts import AccountFormatError, load_accounts
-from .application import AccountFetchOptions, BatchFetchService
+from .application import (
+    MAX_ACCOUNT_FETCH_WORKERS,
+    AccountFetchOptions,
+    BatchFetchService,
+)
 from .imap_client import (
     DEFAULT_IMAP_HOST,
     DEFAULT_IMAP_PORT,
@@ -90,6 +94,18 @@ def _non_negative_int(value: str) -> int:
     return parsed
 
 
+def _bounded_worker_count(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"must be an integer: {value!r}") from exc
+    if not 1 <= parsed <= MAX_ACCOUNT_FETCH_WORKERS:
+        raise argparse.ArgumentTypeError(
+            f"must be between 1 and {MAX_ACCOUNT_FETCH_WORKERS}"
+        )
+    return parsed
+
+
 def _add_common_options(
     parser: argparse.ArgumentParser,
     *,
@@ -128,6 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch_parser.add_argument("--account", help="Only fetch one account email.")
     fetch_parser.add_argument("--mock", action="store_true", help="Use local mock messages.")
+    fetch_parser.add_argument(
+        "--max-workers",
+        type=_bounded_worker_count,
+        help=f"Concurrent account workers (1-{MAX_ACCOUNT_FETCH_WORKERS}).",
+    )
     fetch_parser.add_argument(
         "--stop-on-error",
         action="store_true",
@@ -237,7 +258,11 @@ def fetch(args: argparse.Namespace) -> int:
         if args.mock
         else OutlookAccountMailFetcher(fetch_function=fetch_messages)
     )
-    batch = BatchFetchService(fetcher, repository=store).fetch_accounts(
+    batch = BatchFetchService(
+        fetcher,
+        repository=store,
+        max_workers=getattr(args, "max_workers", None),
+    ).fetch_accounts(
         accounts,
         options,
         stop_on_error=args.stop_on_error,

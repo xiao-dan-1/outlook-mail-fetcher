@@ -76,9 +76,7 @@ git pull
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-第一行用于更新 GHCR 预构建镜像；后两行用于更新本地源码构建。
-
-本地构建默认使用 `python:3.11-slim`；如需替换基础镜像，修改 `docker-compose.build.yml` 中的 `PYTHON_IMAGE`。
+第一行用于更新 GHCR 预构建镜像；后两行用于更新本地源码构建。本地构建默认使用 `python:3.11-slim`；如需替换基础镜像，修改 `docker-compose.build.yml` 中的 `PYTHON_IMAGE`。
 
 `mail_store.sqlite3` 是 CLI 默认用于持久化邮件的本地 SQLite 数据库；Docker Web 部署不读取也不写入它。
 
@@ -118,6 +116,7 @@ python -m mail_receiver.cli fetch accounts.txt --account user@outlook.com --limi
 | `--limit 20` | 每个账号最多拉取的邮件数。 |
 | `--account user@outlook.com` | 只处理指定邮箱。 |
 | `--mock` | 使用本地模拟邮件。 |
+| `--max-workers 4` | 多账号并发数，范围 `1..16`，默认最多并发 4 个账号。 |
 | `--db path\to\mail.sqlite3` | SQLite 数据库路径。 |
 | `--debug` | 输出详细日志。 |
 

@@ -817,6 +817,57 @@ class WebServiceTests(unittest.TestCase):
             self.assertEqual(data["failed"], 0)
             self.assertEqual(seen_kwargs["imap_timeout"], 6)
 
+    def test_fetch_processes_multiple_accounts_concurrently(self) -> None:
+        with TemporaryDirectory() as directory:
+            config = WebConfig(account_file=Path(directory) / "missing.txt")
+            barrier = threading.Barrier(2, timeout=2)
+            worker_threads: set[int] = set()
+            worker_lock = threading.Lock()
+
+            def fake_fetch(_account, **_kwargs):
+                with worker_lock:
+                    worker_threads.add(threading.get_ident())
+                barrier.wait()
+                return []
+
+            with patch("mail_receiver.web.fetch_messages", side_effect=fake_fetch):
+                data = fetch_data(
+                    {
+                        "account_text": (
+                            "first@outlook.com----secret----client----refresh-token\n"
+                            "second@outlook.com----secret----client----refresh-token"
+                        ),
+                        "limit": 1,
+                        "max_workers": 2,
+                    },
+                    config,
+                )
+
+            self.assertEqual(data["failed"], 0)
+            self.assertEqual([row["email"] for row in data["rows"]], [
+                "first@outlook.com",
+                "second@outlook.com",
+            ])
+            self.assertEqual(len(worker_threads), 2)
+
+    def test_fetch_rejects_worker_counts_outside_safe_range(self) -> None:
+        config = WebConfig()
+        account_text = "user@outlook.com----secret----client----refresh-token"
+
+        for worker_count in (0, 17):
+            with self.subTest(worker_count=worker_count), self.assertRaisesRegex(
+                ValueError,
+                "max_workers must be between 1 and 16",
+            ):
+                fetch_data(
+                    {
+                        "account_text": account_text,
+                        "mock": True,
+                        "max_workers": worker_count,
+                    },
+                    config,
+                )
+
     def test_fetch_uses_fast_web_timeouts_by_default(self) -> None:
         with TemporaryDirectory() as directory:
             config = WebConfig(account_file=Path(directory) / "missing.txt")

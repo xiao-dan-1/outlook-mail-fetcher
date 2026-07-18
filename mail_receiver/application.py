@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 import re
 from time import perf_counter
@@ -8,6 +9,9 @@ from typing import Protocol, Sequence
 from .accounts import Account
 from .message_parsing import EmailRecord
 from .repositories import MailRepository
+
+
+MAX_ACCOUNT_FETCH_WORKERS = 16
 
 
 @dataclass(frozen=True)
@@ -76,9 +80,15 @@ class BatchFetchService:
         fetcher: AccountMailFetcher,
         *,
         repository: MailRepository | None = None,
+        max_workers: int | None = None,
     ) -> None:
+        if max_workers is not None and not 1 <= max_workers <= MAX_ACCOUNT_FETCH_WORKERS:
+            raise ValueError(
+                f"max_workers must be between 1 and {MAX_ACCOUNT_FETCH_WORKERS}"
+            )
         self._fetcher = fetcher
         self._repository = repository
+        self._max_workers = max_workers
 
     def fetch_accounts(
         self,
@@ -87,15 +97,106 @@ class BatchFetchService:
         *,
         stop_on_error: bool = False,
     ) -> BatchFetchResult:
+        account_list = list(accounts)
+        if not account_list:
+            return BatchFetchResult([])
+
+        worker_count = self._resolve_worker_count(len(account_list))
+        if worker_count == 1:
+            account_results = self._fetch_sequentially(
+                account_list,
+                options,
+                stop_on_error=stop_on_error,
+            )
+        else:
+            account_results = self._fetch_concurrently(
+                account_list,
+                options,
+                worker_count=worker_count,
+                stop_on_error=stop_on_error,
+            )
+
+        if self._repository is not None:
+            account_results = [
+                self._save_result(result) if result.is_success else result
+                for result in account_results
+            ]
+        return BatchFetchResult(account_results)
+
+    def _resolve_worker_count(self, account_count: int) -> int:
+        requested = self._max_workers
+        if requested is not None:
+            return min(requested, account_count)
+        return min(4, account_count)
+
+    def _fetch_sequentially(
+        self,
+        accounts: Sequence[Account],
+        options: AccountFetchOptions,
+        *,
+        stop_on_error: bool,
+    ) -> list[FetchAccountResult]:
         account_results: list[FetchAccountResult] = []
         for account in accounts:
             result = self._fetch_account(account, options)
-            if result.is_success and self._repository is not None:
-                result = self._save_result(result)
             account_results.append(result)
             if stop_on_error and not result.is_success:
                 break
-        return BatchFetchResult(account_results)
+        return account_results
+
+    def _fetch_concurrently(
+        self,
+        accounts: Sequence[Account],
+        options: AccountFetchOptions,
+        *,
+        worker_count: int,
+        stop_on_error: bool,
+    ) -> list[FetchAccountResult]:
+        indexed_accounts = iter(enumerate(accounts))
+        completed: dict[int, FetchAccountResult] = {}
+        should_stop = False
+
+        with ThreadPoolExecutor(
+            max_workers=worker_count,
+            thread_name_prefix="mail-account",
+        ) as executor:
+            futures: dict[Future[FetchAccountResult], int] = {}
+
+            def submit_next() -> bool:
+                try:
+                    index, account = next(indexed_accounts)
+                except StopIteration:
+                    return False
+                futures[executor.submit(self._fetch_account, account, options)] = index
+                return True
+
+            for _worker in range(worker_count):
+                if not submit_next():
+                    break
+
+            while futures:
+                done, _pending = wait(tuple(futures), return_when=FIRST_COMPLETED)
+                finished_count = 0
+                for future in done:
+                    index = futures.pop(future)
+                    if future.cancelled():
+                        continue
+                    result = future.result()
+                    completed[index] = result
+                    finished_count += 1
+                    if stop_on_error and not result.is_success:
+                        should_stop = True
+
+                if should_stop:
+                    for future in futures:
+                        future.cancel()
+                    continue
+
+                for _finished in range(finished_count):
+                    if not submit_next():
+                        break
+
+        return [completed[index] for index in sorted(completed)]
 
     def _fetch_account(
         self,
@@ -179,5 +280,6 @@ __all__ = [
     "BatchFetchService",
     "FetchAccountResult",
     "FetchDiagnostics",
+    "MAX_ACCOUNT_FETCH_WORKERS",
     "classify_fetch_error",
 ]

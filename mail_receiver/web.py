@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 from . import __version__
 from .accounts import Account, AccountFormatError, load_accounts, parse_accounts
 from .application import (
+    MAX_ACCOUNT_FETCH_WORKERS,
     AccountFetchOptions,
     BatchFetchService,
     FetchDiagnostics,
@@ -162,6 +163,13 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
     imap_port = payload_int(payload, "imap_port", DEFAULT_IMAP_PORT)
     imap_timeout = payload_int(payload, "imap_timeout", WEB_DEFAULT_IMAP_TIMEOUT)
     token_timeout = payload_int(payload, "token_timeout", WEB_DEFAULT_TOKEN_TIMEOUT)
+    max_workers = None
+    if payload.get("max_workers") not in (None, ""):
+        max_workers = payload_int(payload, "max_workers", 1)
+        if not 1 <= max_workers <= MAX_ACCOUNT_FETCH_WORKERS:
+            raise ValueError(
+                f"max_workers must be between 1 and {MAX_ACCOUNT_FETCH_WORKERS}"
+            )
     max_bytes = None if include_raw else WEB_PREVIEW_MAX_BYTES
 
     accounts = resolve_accounts(payload, config)
@@ -185,7 +193,7 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
         if use_mock
         else OutlookAccountMailFetcher(fetch_function=fetch_messages)
     )
-    batch = BatchFetchService(fetcher).fetch_accounts(
+    batch = BatchFetchService(fetcher, max_workers=max_workers).fetch_accounts(
         accounts,
         options,
         stop_on_error=stop_on_error,

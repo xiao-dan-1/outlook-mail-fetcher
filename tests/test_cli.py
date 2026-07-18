@@ -83,6 +83,20 @@ class CliFetchTests(unittest.TestCase):
 
         self.assertEqual(parsed.db, str(DEFAULT_DB_PATH))
         self.assertFalse(parsed.debug)
+        self.assertIsNone(parsed.max_workers)
+
+    def test_fetch_accepts_bounded_worker_count(self) -> None:
+        parsed = cli.build_parser().parse_args(
+            ["fetch", "accounts.txt", "--max-workers", "3"]
+        )
+
+        self.assertEqual(parsed.max_workers, 3)
+
+        for invalid_value in ("0", "17"):
+            with self.subTest(invalid_value=invalid_value), self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(
+                    ["fetch", "accounts.txt", "--max-workers", invalid_value]
+                )
 
     def test_trailing_db_overrides_root_db(self) -> None:
         parsed = cli.build_parser().parse_args(
