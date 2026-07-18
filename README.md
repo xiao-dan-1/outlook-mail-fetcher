@@ -110,7 +110,7 @@ python -m mail_receiver.cli fetch accounts.txt --limit 10 --debug
 python -m mail_receiver.cli fetch accounts.txt --account user@outlook.com --limit 1 --debug
 ```
 
-常用参数：
+常用参数如下，`--db` 和 `--debug` 可放在子命令前或后。`show <id> --raw`（即 `show --raw` 模式）直接输出原始字节，重定向无损且不追加换行。
 
 | 参数 | 说明 |
 | --- | --- |
@@ -129,7 +129,7 @@ python -m mail_receiver.cli fetch accounts.txt --account user@outlook.com --limi
 - 日志和界面只展示脱敏后的账号信息。
 
 ## Development
-当前版本：`0.1.2`。更新记录写在 [CHANGELOG.md](CHANGELOG.md)。发布版本：`git tag v0.1.2 && git push origin v0.1.2`，GitHub Actions 会发布同名 GHCR 镜像。应用运行时仍仅依赖 Python 标准库；检测到 Node.js 时，`unittest` discovery 会执行前端行为测试，未安装 Node.js 时会跳过这些测试。
+当前版本：`0.1.2`。更新记录写在 [CHANGELOG.md](CHANGELOG.md)。发布版本：`git tag v0.1.2 && git push origin v0.1.2`，GitHub Actions 会发布同名 GHCR 镜像。应用运行时仍仅依赖 Python 标准库；本地 `unittest` discovery 检测到 Node.js 时会执行前端行为测试。CI 使用 Python 3.11 和 Node.js 22，测试通过后才构建 Docker 镜像。
 
 ```powershell
 python -m unittest discover -s tests
