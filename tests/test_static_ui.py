@@ -4098,6 +4098,39 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn("min-height: 420px", media_block)
         self.assertNotIn(".dashboard-grid", media_block)
 
+    def test_stacked_reader_docks_log_tab_outside_document_content(self) -> None:
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        stacked_start = css.index("@media (max-width: 820px)")
+        phone_start = css.index("@media (max-width: 720px)", stacked_start)
+        phone_end = css.index("@media (min-width: 561px) and (max-width: 720px)", phone_start)
+        stacked_block = css[stacked_start:phone_start]
+        phone_block = css[phone_start:phone_end]
+
+        tab = nested_css_rule(stacked_block, "button.button.log-drawer-tab")
+        self.assertIn("right: 3px", tab)
+        self.assertIn("bottom: 3px", tab)
+        self.assertIn("width: 40px", tab)
+        self.assertIn("min-width: 40px", tab)
+        self.assertIn("min-height: 44px", tab)
+        self.assertIn("padding-inline: 0", tab)
+        self.assertIn("border-radius: 12px 0 0 12px", tab)
+        focused_tab = nested_css_rule(stacked_block, "button.button.log-drawer-tab:focus-visible")
+        self.assertIn("box-shadow: var(--focus-ring)", focused_tab)
+        self.assertNotIn("log-drawer-tab", phone_block)
+
+    def test_stacked_reader_open_log_reserves_tab_safe_scroll_area(self) -> None:
+        css = STATIC_CSS.read_text(encoding="utf-8")
+        media_start = css.index("@media (max-width: 820px)")
+        media_end = css.index("@media (max-width: 720px)", media_start)
+        media_block = css[media_start:media_end]
+
+        populated_log = nested_css_rule(
+            media_block,
+            ".run-log-panel.log-drawer.is-open .activity-log:not(:empty)",
+        )
+        self.assertIn("padding-bottom: 52px", populated_log)
+        self.assertIn("scroll-padding-bottom: 52px", populated_log)
+
     def test_notebook_account_format_does_not_need_extra_guide_rules(self) -> None:
         css = STATIC_CSS.read_text(encoding="utf-8")
         media_start = css.index("@media (min-width: 981px) and (max-width: 1120px)")

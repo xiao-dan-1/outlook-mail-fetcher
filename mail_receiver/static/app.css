@@ -5355,6 +5355,25 @@ button.button.log-drawer-tab {
   .mail-reader-shell {
     min-height: 420px;
   }
+
+  button.button.log-drawer-tab {
+    right: 3px;
+    bottom: 3px;
+    width: 40px;
+    min-width: 40px;
+    min-height: 44px;
+    padding-inline: 0;
+    border-radius: 12px 0 0 12px;
+  }
+
+  button.button.log-drawer-tab:focus-visible {
+    box-shadow: var(--focus-ring);
+  }
+
+  .run-log-panel.log-drawer.is-open .activity-log:not(:empty) {
+    padding-bottom: 52px;
+    scroll-padding-bottom: 52px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -5385,16 +5404,6 @@ button.button.log-drawer-tab {
     width: min(360px, calc(100vw - 20px));
     max-height: none;
     transform: translateX(calc(100% + 12px));
-  }
-
-  button.log-drawer-tab {
-    top: auto;
-    right: 10px;
-    bottom: 10px;
-    width: auto;
-    min-width: 0;
-    min-height: 34px;
-    padding-inline: 11px;
   }
 
   .account-input-panel,
