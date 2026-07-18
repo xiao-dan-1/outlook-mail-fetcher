@@ -7,11 +7,6 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ACCOUNT_BATCH_SOURCES = {"load_accounts", "resolve_accounts"}
-BATCH_SERVICE_TERMINALS = {
-    "BatchFetchService": "fetch_accounts",
-    "BatchCheckService": "check_accounts",
-}
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -52,262 +47,29 @@ def function_node(path: Path, name: str) -> ast.FunctionDef:
     raise AssertionError(f"function not found: {name}")
 
 
-def account_batch_loops(function: ast.FunctionDef) -> list[ast.AST]:
-    nodes = list(_function_body_nodes(function))
-    service_types = _batch_service_types(nodes)
-    tainted_names: set[str] = set()
-    changed = True
-    while changed:
-        changed = False
-        for node in nodes:
-            assigned_names: set[str] = set()
-            value: ast.expr | None = None
-            if isinstance(node, ast.Assign):
-                value = node.value
-                for target in node.targets:
-                    assigned_names.update(_target_names(target))
-            elif isinstance(node, ast.AnnAssign):
-                value = node.value
-                assigned_names.update(_target_names(node.target))
-            if value is None or not _is_account_batch(
-                value,
-                tainted_names,
-                service_types,
-            ):
-                continue
-            new_names = assigned_names - tainted_names
-            if new_names:
-                tainted_names.update(new_names)
-                changed = True
-
-    prohibited: list[ast.AST] = []
-    for node in nodes:
-        if isinstance(node, (ast.For, ast.AsyncFor)):
-            if _is_account_batch(node.iter, tainted_names, service_types):
-                prohibited.append(node)
-        elif isinstance(node, ast.comprehension):
-            if _is_account_batch(node.iter, tainted_names, service_types):
-                prohibited.append(node)
-    return prohibited
-
-
-def _batch_service_types(nodes: list[ast.AST]) -> dict[str, str]:
-    service_types: dict[str, str] = {}
-    for node in nodes:
-        targets: list[ast.AST] = []
-        value: ast.expr | None = None
-        if isinstance(node, ast.Assign):
-            targets = list(node.targets)
-            value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
-            value = node.value
-        service_type = _batch_service_constructor(value)
-        if service_type is None:
-            continue
-        for target in targets:
-            for name in _target_names(target):
-                service_types[name] = service_type
-    return service_types
-
-
-def _batch_service_constructor(node: ast.AST | None) -> str | None:
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id in BATCH_SERVICE_TERMINALS
-    ):
-        return node.func.id
-    return None
-
-
-def _function_body_nodes(function: ast.FunctionDef) -> list[ast.AST]:
-    nodes: list[ast.AST] = []
-
-    def visit(node: ast.AST) -> None:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(
-                child,
-                (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda),
-            ):
-                continue
-            nodes.append(child)
-            visit(child)
-
-    visit(function)
-    return nodes
-
-
-def _target_names(target: ast.AST) -> set[str]:
-    if isinstance(target, ast.Name):
-        return {target.id}
-    if isinstance(target, (ast.Tuple, ast.List)):
-        names: set[str] = set()
-        for element in target.elts:
-            names.update(_target_names(element))
-        return names
-    return set()
-
-
-def _is_account_batch(
-    node: ast.AST,
-    tainted_names: set[str],
-    service_types: dict[str, str],
-) -> bool:
-    if isinstance(node, ast.Name):
-        return node.id in tainted_names
-    if isinstance(node, ast.Call):
-        call_name = None
-        if isinstance(node.func, ast.Name):
-            call_name = node.func.id
-        elif isinstance(node.func, ast.Attribute):
-            call_name = node.func.attr
-        if call_name in ACCOUNT_BATCH_SOURCES:
-            return True
-        if _is_safe_batch_terminal(node, service_types):
-            return False
-        if isinstance(node.func, ast.Attribute) and _is_account_batch(
-            node.func.value,
-            tainted_names,
-            service_types,
-        ):
-            return True
-        return any(
-            _is_account_batch(argument, tainted_names, service_types)
-            for argument in node.args
-        ) or any(
-            _is_account_batch(keyword.value, tainted_names, service_types)
-            for keyword in node.keywords
-        )
-    return any(
-        _is_account_batch(child, tainted_names, service_types)
-        for child in ast.iter_child_nodes(node)
+def loop_nodes(function: ast.FunctionDef) -> list[ast.AST]:
+    loop_types = (
+        ast.For,
+        ast.AsyncFor,
+        ast.ListComp,
+        ast.SetComp,
+        ast.DictComp,
+        ast.GeneratorExp,
     )
-
-
-def _is_safe_batch_terminal(
-    node: ast.Call,
-    service_types: dict[str, str],
-) -> bool:
-    if not isinstance(node.func, ast.Attribute):
-        return False
-    receiver = node.func.value
-    service_type = None
-    if isinstance(receiver, ast.Name):
-        service_type = service_types.get(receiver.id)
-    else:
-        service_type = _batch_service_constructor(receiver)
-    return (
-        service_type is not None
-        and BATCH_SERVICE_TERMINALS[service_type] == node.func.attr
-    )
+    return [node for node in ast.walk(function) if isinstance(node, loop_types)]
 
 
 class ArchitectureTests(unittest.TestCase):
-    def test_account_batch_loop_detection_catches_aliases_wrappers_and_comprehensions(self) -> None:
-        sources = (
-            (
-                "list comprehension alias",
-                "def entry(path):\n"
-                "    accounts = load_accounts(path)\n"
-                "    alias = list(accounts)\n"
-                "    return [mailbox for mailbox in alias]\n",
-            ),
-            (
-                "enumerated loop alias",
-                "def entry(path):\n"
-                "    accounts = load_accounts(path)\n"
-                "    pending = accounts\n"
-                "    for mailbox in enumerate(pending):\n"
-                "        pass\n",
-            ),
-            (
-                "set wrapper",
-                "def entry(path):\n"
-                "    accounts = load_accounts(path)\n"
-                "    pending = set(accounts)\n"
-                "    for mailbox in pending:\n"
-                "        pass\n",
-            ),
-            (
-                "frozenset wrapper",
-                "def entry(path):\n"
-                "    accounts = load_accounts(path)\n"
-                "    pending = frozenset(accounts)\n"
-                "    return [mailbox for mailbox in pending]\n",
-            ),
-            (
-                "filter wrapper",
-                "def entry(path):\n"
-                "    accounts = load_accounts(path)\n"
-                "    pending = filter(None, accounts)\n"
-                "    return tuple(mailbox for mailbox in pending)\n",
-            ),
-            (
-                "custom wrapper",
-                "def entry(path, wrap):\n"
-                "    accounts = load_accounts(path)\n"
-                "    pending = wrap(accounts)\n"
-                "    for mailbox in pending:\n"
-                "        pass\n",
-            ),
+    def test_batch_entrypoints_contain_no_loops(self) -> None:
+        entrypoints = (
+            (ROOT / "mail_receiver" / "web.py", "check_accounts_data"),
+            (ROOT / "mail_receiver" / "cli.py", "fetch"),
         )
 
-        for name, source in sources:
-            with self.subTest(name=name):
-                function = ast.parse(source).body[0]
-                self.assertEqual(len(account_batch_loops(function)), 1)
-
-    def test_account_batch_loop_detection_finds_named_sources_and_direct_source_loops(self) -> None:
-        sources = (
-            "def entry(payload, config):\n"
-            "    resolved_accounts = resolve_accounts(payload, config)\n"
-            "    alias = list(resolved_accounts)\n"
-            "    return [mailbox for mailbox in alias]\n",
-            "def entry(path):\n"
-            "    pending_accounts = load_accounts(path)\n"
-            "    for mailbox in enumerate(pending_accounts):\n"
-            "        pass\n",
-            "def entry(path):\n"
-            "    for mailbox in load_accounts(path):\n"
-            "        pass\n",
-        )
-
-        for source in sources:
-            with self.subTest(source=source):
-                function = ast.parse(source).body[0]
-                self.assertEqual(len(account_batch_loops(function)), 1)
-
-    def test_account_batch_loop_detection_only_trusts_real_batch_service_results(self) -> None:
-        safe_sources = (
-            "def entry(path, fetcher):\n"
-            "    accounts = load_accounts(path)\n"
-            "    batch = BatchFetchService(fetcher).fetch_accounts(accounts)\n"
-            "    for result in batch.account_results:\n"
-            "        pass\n",
-            "def entry(path, checker):\n"
-            "    accounts = load_accounts(path)\n"
-            "    service = BatchCheckService(checker)\n"
-            "    batch = service.check_accounts(accounts)\n"
-            "    for result in batch.account_results:\n"
-            "        pass\n",
-        )
-
-        for source in safe_sources:
-            with self.subTest(source=source):
-                function = ast.parse(source).body[0]
-                self.assertEqual(account_batch_loops(function), [])
-
-        unsafe_function = ast.parse(
-            "def entry(path, wrap):\n"
-            "    resolved_accounts = load_accounts(path)\n"
-            "    fetch_accounts = wrap\n"
-            "    batch = fetch_accounts(resolved_accounts)\n"
-            "    for row in batch:\n"
-            "        pass\n"
-        ).body[0]
-
-        self.assertEqual(len(account_batch_loops(unsafe_function)), 1)
+        for path, function_name in entrypoints:
+            with self.subTest(path=path.name, function=function_name):
+                function = function_node(path, function_name)
+                self.assertEqual(loop_nodes(function), [])
 
     def test_imported_modules_records_base_and_imported_alias_modules(self) -> None:
         with NamedTemporaryFile(
@@ -403,42 +165,29 @@ class ArchitectureTests(unittest.TestCase):
         self.assertNotIn("imaplib", imports)
         self.assertNotIn("mail_receiver.imap_client", imports)
 
-    def test_web_and_cli_depend_on_shared_batch_service(self) -> None:
-        for module_name in ("mail_receiver.web", "mail_receiver.cli"):
-            module = importlib.import_module(module_name)
-            self.assertTrue(
-                hasattr(module, "BatchFetchService"),
-                f"{module_name} must compose BatchFetchService",
-            )
-
-    def test_entrypoints_do_not_loop_over_accounts_for_batch_business_logic(self) -> None:
+    def test_batch_entrypoints_compose_application_services(self) -> None:
         entrypoints = (
-            (ROOT / "mail_receiver" / "web.py", "check_accounts_data"),
-            (ROOT / "mail_receiver" / "cli.py", "fetch"),
+            (
+                ROOT / "mail_receiver" / "web.py",
+                "check_accounts_data",
+                "BatchCheckService",
+            ),
+            (
+                ROOT / "mail_receiver" / "cli.py",
+                "fetch",
+                "BatchFetchService",
+            ),
         )
 
-        for path, function_name in entrypoints:
+        for path, function_name, expected_service in entrypoints:
             with self.subTest(path=path.name, function=function_name):
                 function = function_node(path, function_name)
-                prohibited = account_batch_loops(function)
-                self.assertEqual(
-                    prohibited,
-                    [],
-                    f"{path.name}:{function_name} must delegate account batches",
-                )
-
-    def test_web_check_composes_batch_check_service(self) -> None:
-        function = function_node(
-            ROOT / "mail_receiver" / "web.py",
-            "check_accounts_data",
-        )
-        called_names = {
-            node.func.id
-            for node in ast.walk(function)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        }
-
-        self.assertIn("BatchCheckService", called_names)
+                called_names = {
+                    node.func.id
+                    for node in ast.walk(function)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                }
+                self.assertIn(expected_service, called_names)
 
 
 if __name__ == "__main__":

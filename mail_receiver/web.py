@@ -26,6 +26,7 @@ from .application import (
     MAX_ACCOUNT_FETCH_WORKERS,
     AccountCheckOptions,
     AccountFetchOptions,
+    BatchCheckResult,
     BatchCheckService,
     BatchFetchService,
     FetchDiagnostics,
@@ -102,6 +103,20 @@ def inspect_input_accounts_data(payload: dict[str, Any], config: WebConfig) -> d
     }
 
 
+def _check_result_rows(batch: BatchCheckResult) -> list[dict[str, Any]]:
+    return [
+        {
+            "email": result.account_email,
+            "ok": result.is_success,
+            "stage": result.stage,
+            "mailbox": result.mailbox,
+            "message_count": result.message_count,
+            "error": result.error,
+        }
+        for result in batch.account_results
+    ]
+
+
 def check_accounts_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
     accounts = resolve_accounts(payload, config)
     mailbox = str(payload.get("mailbox") or "INBOX")
@@ -130,23 +145,12 @@ def check_accounts_data(payload: dict[str, Any], config: WebConfig) -> dict[str,
         options,
         stop_on_error=stop_on_error,
     )
-    rows = [
-        {
-            "email": result.account_email,
-            "ok": result.is_success,
-            "stage": result.stage,
-            "mailbox": result.mailbox,
-            "message_count": result.message_count,
-            "error": result.error,
-        }
-        for result in batch.account_results
-    ]
 
     return {
         "accounts": len(accounts),
         "ok": batch.ok_count,
         "failed": batch.failed_count,
-        "rows": rows,
+        "rows": _check_result_rows(batch),
     }
 
 

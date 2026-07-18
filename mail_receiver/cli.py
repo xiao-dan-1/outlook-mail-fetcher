@@ -10,6 +10,7 @@ from .accounts import AccountFormatError, filter_accounts_by_email, load_account
 from .application import (
     MAX_ACCOUNT_FETCH_WORKERS,
     AccountFetchOptions,
+    BatchFetchResult,
     BatchFetchService,
 )
 from .imap_client import (
@@ -223,6 +224,41 @@ def inspect_accounts(account_file: str) -> int:
     return 0
 
 
+def _report_fetch_results(
+    batch: BatchFetchResult,
+    account_count: int,
+    db_path: object,
+) -> int:
+    failures: list[tuple[str, str]] = []
+    for result in batch.account_results:
+        if result.is_success:
+            print(
+                f"{visible_text(result.account_email)}: "
+                f"fetched={len(result.messages)} inserted={result.saved_count}"
+            )
+        else:
+            message = result.error or "unknown error"
+            failures.append((result.account_email, message))
+            print(
+                f"{visible_text(result.account_email)}: failed={visible_text(message)}",
+                file=sys.stderr,
+            )
+
+    print(
+        f"done: accounts={account_count} fetched={batch.total_fetched} inserted={batch.total_saved} "
+        f"failed={len(failures)} db={visible_text(db_path)}"
+    )
+    if failures:
+        print("failures:", file=sys.stderr)
+        for email, message in failures:
+            print(
+                f"- {visible_text(email)}: {visible_text(message)}",
+                file=sys.stderr,
+            )
+        return 1
+    return 0
+
+
 def fetch(args: argparse.Namespace) -> int:
     accounts = load_accounts(args.account_file)
     if args.account:
@@ -259,35 +295,7 @@ def fetch(args: argparse.Namespace) -> int:
         options,
         stop_on_error=args.stop_on_error,
     )
-
-    failures: list[tuple[str, str]] = []
-    for result in batch.account_results:
-        if result.is_success:
-            print(
-                f"{visible_text(result.account_email)}: "
-                f"fetched={len(result.messages)} inserted={result.saved_count}"
-            )
-        else:
-            message = result.error or "unknown error"
-            failures.append((result.account_email, message))
-            print(
-                f"{visible_text(result.account_email)}: failed={visible_text(message)}",
-                file=sys.stderr,
-            )
-
-    print(
-        f"done: accounts={len(accounts)} fetched={batch.total_fetched} inserted={batch.total_saved} "
-        f"failed={len(failures)} db={visible_text(store.path)}"
-    )
-    if failures:
-        print("failures:", file=sys.stderr)
-        for email, message in failures:
-            print(
-                f"- {visible_text(email)}: {visible_text(message)}",
-                file=sys.stderr,
-            )
-        return 1
-    return 0
+    return _report_fetch_results(batch, len(accounts), store.path)
 
 
 def search(args: argparse.Namespace) -> int:
