@@ -8,8 +8,8 @@ import mail_receiver
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_VERSION = "0.1.3"
-EXPECTED_RELEASE_DATE = "2026-07-18"
+EXPECTED_VERSION = "0.2.0"
+EXPECTED_RELEASE_DATE = "2026-07-19"
 
 
 class ProjectMetadataTests(unittest.TestCase):
