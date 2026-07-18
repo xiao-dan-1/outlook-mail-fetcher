@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 import re
+from typing import Any
 import unittest
 
 
@@ -20,15 +22,127 @@ def markdown_h2_section(markdown: str, title: str) -> str:
     return match.group("body")
 
 
-def workflow_job(workflow: str, name: str) -> str:
-    match = re.search(
-        rf"^  {re.escape(name)}:\s*$\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*$|\Z)",
-        workflow,
-        flags=re.MULTILINE | re.DOTALL,
-    )
+def _yaml_scalar(value: str) -> Any:
+    if value.startswith(('"', "'")):
+        return ast.literal_eval(value)
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    if value in {"null", "~"}:
+        return None
+    if re.fullmatch(r"-?\d+", value):
+        return int(value)
+    return value
+
+
+def _yaml_pair(text: str) -> tuple[str, str]:
+    match = re.fullmatch(r"([^:]+):(.*)", text)
     if match is None:
-        raise AssertionError(f"workflow job not found: {name}")
-    return match.group("body")
+        raise AssertionError(f"unsupported YAML entry: {text}")
+    return match.group(1).strip(), match.group(2).strip()
+
+
+def _yaml_value(
+    lines: list[tuple[int, str, str]],
+    index: int,
+    parent_indent: int,
+    value: str,
+) -> tuple[Any, int]:
+    if value == "|":
+        block: list[str] = []
+        block_indent = lines[index][0] if index < len(lines) else parent_indent + 2
+        while index < len(lines) and lines[index][0] > parent_indent:
+            block.append(lines[index][2][block_indent:])
+            index += 1
+        return "\n".join(block), index
+    if value:
+        return _yaml_scalar(value), index
+    if index < len(lines) and lines[index][0] > parent_indent:
+        return _yaml_block(lines, index, lines[index][0])
+    return {}, index
+
+
+def _yaml_mapping(
+    lines: list[tuple[int, str, str]], index: int, indent: int
+) -> tuple[dict[str, Any], int]:
+    result: dict[str, Any] = {}
+    while index < len(lines):
+        line_indent, text, _raw = lines[index]
+        if line_indent != indent or text.startswith("- "):
+            break
+        key, value = _yaml_pair(text)
+        index += 1
+        result[key], index = _yaml_value(lines, index, indent, value)
+    return result, index
+
+
+def _yaml_sequence(
+    lines: list[tuple[int, str, str]], index: int, indent: int
+) -> tuple[list[Any], int]:
+    result: list[Any] = []
+    while index < len(lines):
+        line_indent, text, _raw = lines[index]
+        if line_indent != indent or not text.startswith("- "):
+            break
+        item = text[2:].strip()
+        index += 1
+        if ":" not in item:
+            result.append(_yaml_scalar(item))
+            continue
+
+        key, value = _yaml_pair(item)
+        item_indent = indent + 2
+        mapping: dict[str, Any] = {}
+        mapping[key], index = _yaml_value(lines, index, item_indent, value)
+        if index < len(lines) and lines[index][0] == item_indent:
+            remainder, index = _yaml_mapping(lines, index, item_indent)
+            mapping.update(remainder)
+        result.append(mapping)
+    return result, index
+
+
+def _yaml_block(
+    lines: list[tuple[int, str, str]], index: int, indent: int
+) -> tuple[Any, int]:
+    if lines[index][1].startswith("- "):
+        return _yaml_sequence(lines, index, indent)
+    return _yaml_mapping(lines, index, indent)
+
+
+def parse_workflow_yaml(workflow: str) -> dict[str, Any]:
+    lines: list[tuple[int, str, str]] = []
+    for raw in workflow.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        if "\t" in raw[:indent]:
+            raise AssertionError("workflow YAML must not use tabs for indentation")
+        lines.append((indent, raw[indent:], raw))
+    if not lines:
+        raise AssertionError("workflow YAML is empty")
+    parsed, index = _yaml_block(lines, 0, lines[0][0])
+    if index != len(lines) or not isinstance(parsed, dict):
+        raise AssertionError("workflow YAML did not parse as one mapping")
+    return parsed
+
+
+def workflow_step(job: dict[str, Any], action: str) -> dict[str, Any]:
+    matches = [step for step in job["steps"] if step.get("uses") == action]
+    if len(matches) != 1:
+        raise AssertionError(f"expected one {action} step, found {len(matches)}")
+    return matches[0]
+
+
+def job_runs_for_event(job: dict[str, Any], event_name: str) -> bool:
+    condition = job.get("if")
+    if condition is None:
+        return True
+    if condition == "github.event_name == 'pull_request'":
+        return event_name == "pull_request"
+    if condition == "github.event_name != 'pull_request'":
+        return event_name != "pull_request"
+    raise AssertionError(f"unsupported job condition: {condition}")
 
 
 class DockerDeploymentTests(unittest.TestCase):
@@ -79,41 +193,150 @@ class DockerDeploymentTests(unittest.TestCase):
         self.assertNotIn("--account-file", override)
         self.assertNotIn("ACCOUNT_FILE", override)
 
-    def test_github_actions_publishes_prebuilt_image_to_ghcr(self) -> None:
-        workflow = self.read_root_file(".github/workflows/docker-image.yml")
-        build_job = workflow_job(workflow, "build")
+    def test_github_actions_limits_package_write_permission_to_publish_job(self) -> None:
+        workflow = parse_workflow_yaml(
+            self.read_root_file(".github/workflows/docker-image.yml")
+        )
+        jobs = workflow["jobs"]
 
-        self.assertIn("contents: read", workflow)
-        self.assertIn("packages: write", workflow)
-        self.assertIn("docker/setup-buildx-action@v3", build_job)
-        self.assertIn("docker/login-action", build_job)
-        self.assertIn("if: github.event_name != 'pull_request'", build_job)
-        self.assertIn("registry: ghcr.io", build_job)
-        self.assertIn("docker/metadata-action@v5", build_job)
-        self.assertIn("docker/build-push-action", build_job)
-        self.assertIn("context: .", build_job)
-        self.assertIn("file: ./Dockerfile", build_job)
-        self.assertIn("push: ${{ github.event_name != 'pull_request' }}", build_job)
-        self.assertIn("images: ghcr.io/${{ github.repository }}", build_job)
-        self.assertIn("type=raw,value=latest", build_job)
-        self.assertIn("tags: ${{ steps.meta.outputs.tags }}", build_job)
-        self.assertIn("labels: ${{ steps.meta.outputs.labels }}", build_job)
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        self.assertEqual(list(jobs), ["test", "build", "publish"])
+        self.assertNotIn("permissions", jobs["test"])
+        self.assertNotIn("permissions", jobs["build"])
+        self.assertEqual(
+            jobs["publish"]["permissions"],
+            {"contents": "read", "packages": "write"},
+        )
+        login_jobs = [
+            name
+            for name, job in jobs.items()
+            if any(step.get("uses") == "docker/login-action@v3" for step in job["steps"])
+        ]
+        self.assertEqual(login_jobs, ["publish"])
 
-    def test_github_actions_runs_python_and_node_tests_before_docker_build(self) -> None:
-        workflow = self.read_root_file(".github/workflows/docker-image.yml")
-        test_job = workflow_job(workflow, "test")
-        build_job = workflow_job(workflow, "build")
+    def test_github_actions_tests_then_runs_one_image_job_for_each_event(self) -> None:
+        workflow = parse_workflow_yaml(
+            self.read_root_file(".github/workflows/docker-image.yml")
+        )
+        jobs = workflow["jobs"]
+        self.assertIn("publish", jobs)
+        test_job = jobs["test"]
+        build_job = jobs["build"]
+        publish_job = jobs["publish"]
 
-        self.assertLess(workflow.index("  test:"), workflow.index("  build:"))
-        self.assertIn("runs-on: ubuntu-latest", test_job)
-        self.assertIn("actions/checkout@v4", test_job)
-        self.assertIn("actions/setup-python@v5", test_job)
-        self.assertRegex(test_job, re.compile(r"python-version:\s*['\"]?3\.11['\"]?"))
-        self.assertIn("actions/setup-node@v4", test_job)
-        self.assertRegex(test_job, re.compile(r"node-version:\s*['\"]?22['\"]?"))
-        self.assertIn("run: python -m unittest discover -s tests", test_job)
-        self.assertIn("run: node --test tests/*.test.js", test_job)
-        self.assertRegex(build_job, re.compile(r"^\s+needs:\s*test\s*$", re.MULTILINE))
+        self.assertEqual(
+            workflow["on"],
+            {
+                "push": {
+                    "branches": ["main", "master"],
+                    "tags": ["v*.*.*"],
+                },
+                "pull_request": {"branches": ["main", "master"]},
+                "workflow_dispatch": {},
+            },
+        )
+
+        self.assertEqual(test_job["runs-on"], "ubuntu-latest")
+        self.assertEqual(
+            [step.get("uses") for step in test_job["steps"] if "uses" in step],
+            [
+                "actions/checkout@v4",
+                "actions/setup-python@v5",
+                "actions/setup-node@v4",
+            ],
+        )
+        self.assertEqual(test_job["steps"][1]["with"]["python-version"], "3.11")
+        self.assertEqual(test_job["steps"][2]["with"]["node-version"], "22")
+        self.assertEqual(
+            [step["run"] for step in test_job["steps"] if "run" in step],
+            [
+                "python -m unittest discover -s tests",
+                "node --test tests/*.test.js",
+            ],
+        )
+        self.assertEqual(build_job["needs"], "test")
+        self.assertEqual(publish_job["needs"], "test")
+        self.assertEqual(build_job["if"], "github.event_name == 'pull_request'")
+        self.assertEqual(publish_job["if"], "github.event_name != 'pull_request'")
+
+        for event_name, expected_job in (
+            ("pull_request", "build"),
+            ("push", "publish"),
+            ("workflow_dispatch", "publish"),
+        ):
+            with self.subTest(event_name=event_name):
+                selected = [
+                    name
+                    for name in ("build", "publish")
+                    if job_runs_for_event(jobs[name], event_name)
+                ]
+                self.assertEqual(selected, [expected_job])
+
+        self.assertFalse(
+            workflow_step(build_job, "docker/build-push-action@v6")["with"]["push"]
+        )
+        publish_push = workflow_step(
+            publish_job, "docker/build-push-action@v6"
+        )["with"]["push"]
+        self.assertIn(
+            publish_push,
+            (True, "${{ github.event_name != 'pull_request' }}"),
+        )
+
+    def test_github_actions_preserves_docker_build_and_publish_steps(self) -> None:
+        workflow = parse_workflow_yaml(
+            self.read_root_file(".github/workflows/docker-image.yml")
+        )
+        jobs = workflow["jobs"]
+        self.assertIn("publish", jobs)
+        build_job = jobs["build"]
+        publish_job = jobs["publish"]
+
+        self.assertEqual(
+            [step.get("uses") for step in build_job["steps"]],
+            [
+                "actions/checkout@v4",
+                "docker/setup-buildx-action@v3",
+                "docker/metadata-action@v5",
+                "docker/build-push-action@v6",
+            ],
+        )
+        self.assertEqual(
+            [step.get("uses") for step in publish_job["steps"]],
+            [
+                "actions/checkout@v4",
+                "docker/setup-buildx-action@v3",
+                "docker/login-action@v3",
+                "docker/metadata-action@v5",
+                "docker/build-push-action@v6",
+            ],
+        )
+        login = workflow_step(publish_job, "docker/login-action@v3")
+        self.assertEqual(login["if"], "github.event_name != 'pull_request'")
+        self.assertEqual(login["with"]["registry"], "ghcr.io")
+        self.assertEqual(login["with"]["username"], "${{ github.actor }}")
+        self.assertEqual(login["with"]["password"], "${{ secrets.GITHUB_TOKEN }}")
+
+        for job_name in ("build", "publish"):
+            with self.subTest(job=job_name):
+                metadata = workflow_step(jobs[job_name], "docker/metadata-action@v5")
+                image_build = workflow_step(
+                    jobs[job_name], "docker/build-push-action@v6"
+                )
+                self.assertEqual(
+                    metadata["with"]["images"],
+                    "ghcr.io/${{ github.repository }}",
+                )
+                self.assertIn("type=raw,value=latest", metadata["with"]["tags"])
+                self.assertEqual(image_build["with"]["context"], ".")
+                self.assertEqual(image_build["with"]["file"], "./Dockerfile")
+                self.assertEqual(
+                    image_build["with"]["tags"], "${{ steps.meta.outputs.tags }}"
+                )
+                self.assertEqual(
+                    image_build["with"]["labels"],
+                    "${{ steps.meta.outputs.labels }}",
+                )
 
     def test_dockerignore_excludes_local_and_sensitive_files(self) -> None:
         dockerignore = self.read_root_file(".dockerignore")
@@ -176,7 +399,7 @@ class DockerDeploymentTests(unittest.TestCase):
         self.assertIn("原始字节", readme)
         self.assertIn("Python 3.11", readme)
         self.assertIn("Node.js 22", readme)
-        self.assertIn("测试通过后才构建 Docker 镜像", readme)
+        self.assertIn("测试通过后才构建或发布 Docker 镜像", readme)
 
 
 if __name__ == "__main__":
