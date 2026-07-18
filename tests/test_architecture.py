@@ -7,7 +7,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ACCOUNT_BATCH_WRAPPERS = {"list", "tuple", "iter", "enumerate", "reversed", "sorted"}
+SAFE_ACCOUNT_BATCH_TERMINALS = {"fetch_accounts", "check_accounts"}
 
 
 def imported_modules(path: Path) -> set[str]:
@@ -109,21 +109,29 @@ def _target_names(target: ast.AST) -> set[str]:
 def _is_account_batch(node: ast.AST, tainted_names: set[str]) -> bool:
     if isinstance(node, ast.Name):
         return node.id in tainted_names
-    if not isinstance(node, ast.Call):
-        return False
-    if (
-        isinstance(node.func, ast.Name)
-        and node.func.id in ACCOUNT_BATCH_WRAPPERS
-        and node.args
-    ):
-        return _is_account_batch(node.args[0], tainted_names)
-    if (
-        isinstance(node.func, ast.Attribute)
-        and node.func.attr == "copy"
-        and not node.args
-    ):
-        return _is_account_batch(node.func.value, tainted_names)
-    return False
+    if isinstance(node, ast.Call):
+        call_name = None
+        if isinstance(node.func, ast.Name):
+            call_name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            call_name = node.func.attr
+        if call_name in SAFE_ACCOUNT_BATCH_TERMINALS:
+            return False
+        if isinstance(node.func, ast.Attribute) and _is_account_batch(
+            node.func.value,
+            tainted_names,
+        ):
+            return True
+        return any(
+            _is_account_batch(argument, tainted_names) for argument in node.args
+        ) or any(
+            _is_account_batch(keyword.value, tainted_names)
+            for keyword in node.keywords
+        )
+    return any(
+        _is_account_batch(child, tainted_names)
+        for child in ast.iter_child_nodes(node)
+    )
 
 
 class ArchitectureTests(unittest.TestCase):
@@ -140,6 +148,32 @@ class ArchitectureTests(unittest.TestCase):
                 "def entry(accounts):\n"
                 "    pending = accounts\n"
                 "    for mailbox in enumerate(pending):\n"
+                "        pass\n",
+            ),
+            (
+                "set wrapper",
+                "def entry(accounts):\n"
+                "    pending = set(accounts)\n"
+                "    for mailbox in pending:\n"
+                "        pass\n",
+            ),
+            (
+                "frozenset wrapper",
+                "def entry(accounts):\n"
+                "    pending = frozenset(accounts)\n"
+                "    return [mailbox for mailbox in pending]\n",
+            ),
+            (
+                "filter wrapper",
+                "def entry(accounts):\n"
+                "    pending = filter(None, accounts)\n"
+                "    return tuple(mailbox for mailbox in pending)\n",
+            ),
+            (
+                "custom wrapper",
+                "def entry(accounts, wrap):\n"
+                "    pending = wrap(accounts)\n"
+                "    for mailbox in pending:\n"
                 "        pass\n",
             ),
         )
