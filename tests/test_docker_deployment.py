@@ -364,7 +364,7 @@ class DockerDeploymentTests(unittest.TestCase):
         self.assertIn("http://127.0.0.1:8765/", readme)
         docker_section = markdown_h2_section(readme, "Docker")
         self.assertIn('"9876:8765"', docker_section)
-        self.assertIn("mail.sqlite3", docker_section)
+        self.assertIn("mail_store.sqlite3", docker_section)
         self.assertIn("docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build", docker_section)
         self.assertIn("GHCR", docker_section)
         self.assertIn("PYTHON_IMAGE", docker_section)

@@ -66,7 +66,7 @@ class StoredEmail:
     body_preview: str
 
 
-class MailStore:
+class SQLiteMailRepository:
     def __init__(self, path: str | Path = DEFAULT_DB_PATH) -> None:
         self.path = Path(path)
 
@@ -208,6 +208,9 @@ class MailStore:
                 """
             ).fetchall()
         return {str(row["account_email"]): int(row["total"]) for row in rows}
+
+
+MailStore = SQLiteMailRepository
 
 
 def _create_emails_table(connection: sqlite3.Connection) -> None:

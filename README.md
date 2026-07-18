@@ -80,7 +80,7 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 本地构建默认使用 `python:3.11-slim`；如需替换基础镜像，修改 `docker-compose.build.yml` 中的 `PYTHON_IMAGE`。
 
-`mail.sqlite3` 是 CLI 持久化邮件时使用的本地 SQLite 数据库；Docker Web 部署不读取也不写入它。
+`mail_store.sqlite3` 是 CLI 默认用于持久化邮件的本地 SQLite 数据库；Docker Web 部署不读取也不写入它。
 
 ## CLI
 

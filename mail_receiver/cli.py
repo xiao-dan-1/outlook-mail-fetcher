@@ -18,7 +18,7 @@ from .imap_client import (
 from .mail_fetching import MockAccountMailFetcher, OutlookAccountMailFetcher
 from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT
 from .output import visible_text
-from .storage import DEFAULT_DB_PATH, MailStore
+from .storage import DEFAULT_DB_PATH, SQLiteMailRepository
 
 
 def _set_binary_mode(file_descriptor: int) -> None:
@@ -210,7 +210,7 @@ def fetch(args: argparse.Namespace) -> int:
             print(f"account not found: {visible_text(args.account)}", file=sys.stderr)
             return 1
 
-    store = MailStore(args.db)
+    store = SQLiteMailRepository(args.db)
     store.initialize()
 
     for account in accounts:
@@ -274,7 +274,7 @@ def fetch(args: argparse.Namespace) -> int:
 
 
 def search(args: argparse.Namespace) -> int:
-    store = MailStore(args.db)
+    store = SQLiteMailRepository(args.db)
     store.initialize()
     results = store.search(args.query, account_email=args.account, limit=args.limit)
     print(f"results: {len(results)}")
@@ -288,7 +288,7 @@ def search(args: argparse.Namespace) -> int:
 
 
 def show(args: argparse.Namespace) -> int:
-    store = MailStore(args.db)
+    store = SQLiteMailRepository(args.db)
     store.initialize()
 
     if args.raw:

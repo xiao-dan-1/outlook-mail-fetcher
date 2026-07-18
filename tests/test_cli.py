@@ -572,7 +572,7 @@ class CliVisibleOutputTests(unittest.TestCase):
         error = io.StringIO()
 
         with patch("mail_receiver.cli.load_accounts", return_value=[good, bad]), patch(
-            "mail_receiver.cli.MailStore", return_value=FakeStore()
+            "mail_receiver.cli.SQLiteMailRepository", return_value=FakeStore()
         ), patch("mail_receiver.cli.fetch_messages", side_effect=fake_fetch), patch(
             "mail_receiver.cli.logging.info"
         ) as info, redirect_stdout(output), redirect_stderr(error):

@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from mail_receiver.imap_client import EmailRecord
-from mail_receiver.storage import MailStore
+from mail_receiver.storage import MailStore, SQLiteMailRepository
 
 
 def _record(
@@ -163,6 +163,9 @@ def _storage_snapshot(db_path: Path) -> tuple[object, ...]:
 
 
 class StorageTests(unittest.TestCase):
+    def test_explicit_sqlite_repository_name_keeps_mail_store_compatibility(self) -> None:
+        self.assertIs(SQLiteMailRepository, MailStore)
+
     def test_initialize_creates_nocase_account_identity_with_binary_mail_keys(self) -> None:
         with TemporaryDirectory() as directory:
             db_path = Path(directory) / "mail.sqlite3"

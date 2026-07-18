@@ -1,5 +1,6 @@
 import ast
 import importlib
+import inspect
 from pathlib import Path
 import unittest
 
@@ -19,6 +20,26 @@ def imported_modules(path: Path) -> set[str]:
 
 
 class ArchitectureTests(unittest.TestCase):
+    def test_architecture_modules_avoid_vague_public_type_names(self) -> None:
+        prohibited = {"Manager", "Helper", "Utils", "Processor", "Data"}
+        public_types: set[str] = set()
+        for module_name in (
+            "mail_receiver.application",
+            "mail_receiver.mail_fetching",
+            "mail_receiver.message_parsing",
+            "mail_receiver.repositories",
+        ):
+            module = importlib.import_module(module_name)
+            public_types.update(
+                name
+                for name, value in vars(module).items()
+                if not name.startswith("_")
+                and inspect.isclass(value)
+                and value.__module__ == module_name
+            )
+
+        self.assertTrue(prohibited.isdisjoint(public_types), public_types & prohibited)
+
     def test_application_layer_does_not_import_entrypoints_or_infrastructure(self) -> None:
         imports = imported_modules(ROOT / "mail_receiver" / "application.py")
         prohibited = {
