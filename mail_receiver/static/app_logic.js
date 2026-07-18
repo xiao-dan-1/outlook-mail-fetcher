@@ -133,10 +133,55 @@
     }) || null;
   }
 
+  function createVerificationRuleRegistry(initialRules) {
+    var entries = [];
+    var ruleIds = new Set();
+    var nextOrder = 0;
+
+    function register(rule) {
+      if (!rule || !rule.id || typeof rule.match !== 'function') {
+        throw new TypeError('verification rule requires id and match');
+      }
+      if (ruleIds.has(rule.id)) {
+        throw new Error('verification rule already registered: ' + rule.id);
+      }
+      ruleIds.add(rule.id);
+      entries.push({ rule: rule, order: nextOrder });
+      nextOrder += 1;
+      entries.sort(function (left, right) {
+        var priorityDifference = (Number(right.rule.priority) || 0)
+          - (Number(left.rule.priority) || 0);
+        return priorityDifference || left.order - right.order;
+      });
+      return rule;
+    }
+
+    function find(context) {
+      for (var entry of entries) {
+        try {
+          var result = entry.rule.match(context);
+          if (result) {
+            return Object.assign({}, result, { rule_id: entry.rule.id });
+          }
+        } catch (error) {
+          // A provider rule must not prevent lower-priority fallback rules.
+        }
+      }
+      return null;
+    }
+
+    (initialRules || []).forEach(register);
+    return {
+      find: find,
+      register: register,
+    };
+  }
+
   var api = {
     createOperationGate: createOperationGate,
     createRequestFailureState: createRequestFailureState,
     createSessionCoordinator: createSessionCoordinator,
+    createVerificationRuleRegistry: createVerificationRuleRegistry,
     messageKey: messageKey,
     findMessageByKey: findMessageByKey,
   };

@@ -1,4 +1,4 @@
-const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;
+const { createOperationGate, createRequestFailureState, createSessionCoordinator, createVerificationRuleRegistry, findMessageByKey, messageKey } = window.MailReceiverLogic;
 
 const state = {
   config: null,
@@ -26,6 +26,7 @@ const VERIFICATION_PROVIDERS = [
   {
     id: "xai",
     label: "xAI",
+    priority: 100,
     source: "xAI 确认码",
     identityPatterns: [/x\.ai/i, /xai/i, /grok/i],
     keywords: [/confirmation code/i, /verification code/i, /security code/i],
@@ -45,6 +46,7 @@ const VERIFICATION_PROVIDERS = [
   {
     id: "generic",
     label: "通用",
+    priority: 0,
     source: "关键词附近",
     keywords: [VERIFICATION_KEYWORD_PATTERN],
     codePatterns: [
@@ -63,6 +65,14 @@ const VERIFICATION_PROVIDERS = [
     ],
   },
 ];
+const verificationRuleRegistry = createVerificationRuleRegistry();
+VERIFICATION_PROVIDERS.forEach((provider) => {
+  verificationRuleRegistry.register({
+    id: `provider:${provider.id}`,
+    priority: provider.priority,
+    match: ({ text, identityText }) => providerVerificationCandidate(provider, text, identityText),
+  });
+});
 let autoParseTimer = null;
 
 const el = {
@@ -429,11 +439,9 @@ function extractVerificationCode(mail) {
   }
 
   const identityText = verificationIdentityText(mail, text);
-  for (const provider of VERIFICATION_PROVIDERS) {
-    const candidate = providerVerificationCandidate(provider, text, identityText);
-    if (candidate) {
-      return candidate;
-    }
+  const candidate = verificationRuleRegistry.find({ text, identityText });
+  if (candidate) {
+    return candidate;
   }
 
   return {

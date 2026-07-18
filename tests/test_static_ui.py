@@ -251,7 +251,7 @@ class StaticUiTests(unittest.TestCase):
         js = STATIC_JS.read_text(encoding="utf-8")
 
         self.assertIn(
-            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, createVerificationRuleRegistry, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertEqual(js.count("const mailOperationGate = createOperationGate();"), 1)
@@ -311,7 +311,7 @@ class StaticUiTests(unittest.TestCase):
         js = STATIC_JS.read_text(encoding="utf-8")
 
         self.assertIn(
-            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, createVerificationRuleRegistry, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertIn('request: "请求"', js)
@@ -380,7 +380,7 @@ class StaticUiTests(unittest.TestCase):
             return function_match.group("body")
 
         self.assertIn(
-            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, createVerificationRuleRegistry, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertIn("const sessionRequests = createSessionCoordinator();", js)
@@ -2972,7 +2972,7 @@ class StaticUiTests(unittest.TestCase):
         self.assertIn(app_script, html)
         self.assertLess(html.index(logic_script), html.index(app_script))
         self.assertIn(
-            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, findMessageByKey, messageKey } = window.MailReceiverLogic;",
+            "const { createOperationGate, createRequestFailureState, createSessionCoordinator, createVerificationRuleRegistry, findMessageByKey, messageKey } = window.MailReceiverLogic;",
             js,
         )
         self.assertIn("selectedMessageKey: null", js)

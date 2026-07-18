@@ -6,6 +6,70 @@ const vm = require('node:vm');
 
 const logic = require('../mail_receiver/static/app_logic.js');
 
+test('verification registry chooses the highest-priority matching rule', () => {
+  const registry = logic.createVerificationRuleRegistry();
+  registry.register({
+    id: 'low',
+    priority: 1,
+    match: () => ({ code: '111111' }),
+  });
+  registry.register({
+    id: 'high',
+    priority: 10,
+    match: () => ({ code: '222222' }),
+  });
+
+  assert.deepEqual(registry.find({}), {
+    code: '222222',
+    rule_id: 'high',
+  });
+});
+
+test('verification registry preserves registration order at equal priority', () => {
+  const registry = logic.createVerificationRuleRegistry([
+    { id: 'first', priority: 5, match: () => ({ code: '111111' }) },
+    { id: 'second', priority: 5, match: () => ({ code: '222222' }) },
+  ]);
+
+  assert.equal(registry.find({}).rule_id, 'first');
+});
+
+test('verification registry isolates a broken rule and continues', () => {
+  const registry = logic.createVerificationRuleRegistry([
+    {
+      id: 'broken',
+      priority: 10,
+      match: () => {
+        throw new Error('broken rule');
+      },
+    },
+    { id: 'fallback', priority: 0, match: () => ({ code: '333333' }) },
+  ]);
+
+  assert.deepEqual(registry.find({}), {
+    code: '333333',
+    rule_id: 'fallback',
+  });
+});
+
+test('verification registry rejects rules without stable ids or match functions', () => {
+  const registry = logic.createVerificationRuleRegistry();
+
+  assert.throws(() => registry.register({ match() {} }), /id and match/);
+  assert.throws(() => registry.register({ id: 'missing-match' }), /id and match/);
+});
+
+test('verification registry rejects duplicate rule ids', () => {
+  const registry = logic.createVerificationRuleRegistry([
+    { id: 'provider:generic', match: () => null },
+  ]);
+
+  assert.throws(
+    () => registry.register({ id: 'provider:generic', match: () => null }),
+    /already registered/,
+  );
+});
+
 const APP_PATH = path.join(__dirname, '..', 'mail_receiver', 'static', 'app.js');
 const APP_SOURCE = fs.readFileSync(APP_PATH, 'utf8');
 const BOOTSTRAP_MARKER = '\ninitTheme();';
@@ -117,6 +181,7 @@ test('extracts the body code instead of digits in the recipient address', () => 
   assert.equal(result.code, '987243');
   assert.equal(result.provider, 'generic');
   assert.equal(result.confidence, 'high');
+  assert.equal(result.rule_id, 'provider:generic');
 });
 
 test('does not treat digits in sender or recipient addresses as a verification code', () => {
