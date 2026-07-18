@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 import logging
 import socket
+import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -221,7 +222,11 @@ def fetch_data(payload: dict[str, Any], config: WebConfig) -> dict[str, Any]:
                     **fetch_diagnostics_to_dict(diagnostics),
                 }
             )
-            LOGGER.info("fetch failed for %s: %s", account.email, error)
+            LOGGER.info(
+                "fetch failed for %s: %s",
+                visible_text(account.email),
+                visible_text(error),
+            )
             if stop_on_error:
                 break
 
@@ -488,7 +493,16 @@ def create_handler(config: WebConfig) -> type[BaseHTTPRequestHandler]:
             except ValueError as exc:
                 self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
             except Exception as exc:
-                LOGGER.exception("request failed")
+                safe_traceback = visible_text(
+                    "".join(
+                        traceback.format_exception(
+                            type(exc),
+                            exc,
+                            exc.__traceback__,
+                        )
+                    )
+                )
+                LOGGER.error("request failed: %s", safe_traceback)
                 self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
 
         def _send_json(self, data: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:

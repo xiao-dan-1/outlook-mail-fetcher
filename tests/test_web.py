@@ -344,6 +344,32 @@ class WebServiceTests(unittest.TestCase):
         self.assertIn("unexpected-key", response[2]["error"])
         self.assertTrue(any("request failed" in entry for entry in logs.output))
 
+    def test_unexpected_callback_log_escapes_full_traceback_without_changing_response(self) -> None:
+        failure = "unexpected\r\nFORGED\x1b[31m\x00\u2028failure"
+
+        with patch(
+            "mail_receiver.web.inspect_input_accounts_data",
+            side_effect=RuntimeError(failure),
+        ), patch("mail_receiver.web.LOGGER.error") as error, patch(
+            "mail_receiver.web.LOGGER.exception"
+        ) as legacy_exception:
+            response = self.request_json("POST", "/api/accounts", body=b"{}")
+
+        legacy_exception.assert_not_called()
+        error.assert_called_once()
+        self.assertEqual(error.call_args.args[0], "request failed: %s")
+        safe_traceback = error.call_args.args[1]
+        self.assertIn("Traceback (most recent call last):\\n", safe_traceback)
+        self.assertIn("web.py", safe_traceback)
+        self.assertIn("RuntimeError", safe_traceback)
+        self.assertIn(
+            "unexpected\\r\\nFORGED\\x1b[31m\\x00\\u2028failure",
+            safe_traceback,
+        )
+        for character in ("\r", "\n", "\x1b", "\x00", "\u2028"):
+            self.assertNotIn(character, safe_traceback)
+        self.assertEqual(response[2]["error"], failure)
+
     def test_post_empty_body_remains_an_empty_object(self) -> None:
         response = self.request_json("POST", "/api/accounts")
 
@@ -836,6 +862,38 @@ class WebServiceTests(unittest.TestCase):
 
                 self.assertEqual(data["failed"], 1)
                 self.assertEqual(data["rows"][0]["stage"], expected_stage)
+
+    def test_fetch_failure_log_escapes_account_and_error_without_changing_response(self) -> None:
+        account_email = "user\x1b\x00@outlook.com"
+        failure = "oauth\r\nFORGED\x1b[31m\x00\u2028failure"
+
+        with patch(
+            "mail_receiver.web.fetch_messages",
+            side_effect=RuntimeError(failure),
+        ), patch("mail_receiver.web.LOGGER.info") as info:
+            data = fetch_data(
+                {
+                    "account_text": (
+                        f"{account_email}----secret----client----refresh-token"
+                    ),
+                    "limit": 1,
+                },
+                WebConfig(),
+            )
+
+        info.assert_called_once_with(
+            "fetch failed for %s: %s",
+            "user\\x1b\\x00@outlook.com",
+            "oauth\\r\\nFORGED\\x1b[31m\\x00\\u2028failure",
+        )
+        for argument in info.call_args.args[1:]:
+            self.assertNotIn("\r", argument)
+            self.assertNotIn("\n", argument)
+            self.assertNotIn("\x1b", argument)
+            self.assertNotIn("\x00", argument)
+            self.assertNotIn("\u2028", argument)
+        self.assertEqual(data["rows"][0]["email"], account_email)
+        self.assertEqual(data["rows"][0]["error"], failure)
 
     def test_error_classification_prefers_specific_stage_over_connection_words(self) -> None:
         cases = {
