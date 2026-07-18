@@ -51,6 +51,7 @@ def loop_nodes(function: ast.FunctionDef) -> list[ast.AST]:
     loop_types = (
         ast.For,
         ast.AsyncFor,
+        ast.While,
         ast.ListComp,
         ast.SetComp,
         ast.DictComp,
@@ -60,6 +61,18 @@ def loop_nodes(function: ast.FunctionDef) -> list[ast.AST]:
 
 
 class ArchitectureTests(unittest.TestCase):
+    def test_loop_nodes_detects_while_statements(self) -> None:
+        function = ast.parse(
+            "def entry(accounts):\n"
+            "    while accounts:\n"
+            "        accounts.pop()\n"
+        ).body[0]
+
+        loops = loop_nodes(function)
+
+        self.assertEqual(len(loops), 1)
+        self.assertIsInstance(loops[0], ast.While)
+
     def test_batch_entrypoints_contain_no_loops(self) -> None:
         entrypoints = (
             (ROOT / "mail_receiver" / "web.py", "check_accounts_data"),
@@ -171,15 +184,17 @@ class ArchitectureTests(unittest.TestCase):
                 ROOT / "mail_receiver" / "web.py",
                 "check_accounts_data",
                 "BatchCheckService",
+                "check_accounts",
             ),
             (
                 ROOT / "mail_receiver" / "cli.py",
                 "fetch",
                 "BatchFetchService",
+                "fetch_accounts",
             ),
         )
 
-        for path, function_name, expected_service in entrypoints:
+        for path, function_name, expected_service, expected_method in entrypoints:
             with self.subTest(path=path.name, function=function_name):
                 function = function_node(path, function_name)
                 called_names = {
@@ -187,7 +202,14 @@ class ArchitectureTests(unittest.TestCase):
                     for node in ast.walk(function)
                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                 }
+                called_attributes = {
+                    node.func.attr
+                    for node in ast.walk(function)
+                    if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                }
                 self.assertIn(expected_service, called_names)
+                self.assertIn(expected_method, called_attributes)
 
 
 if __name__ == "__main__":
