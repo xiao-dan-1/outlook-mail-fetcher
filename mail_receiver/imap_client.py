@@ -3,11 +3,6 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from email import policy
-from email.message import Message
-from email.parser import BytesParser
-from email.utils import parsedate_to_datetime
-from html.parser import HTMLParser
 import imaplib
 import logging
 import re
@@ -16,6 +11,14 @@ from time import perf_counter
 from typing import Callable, Iterable, TypeVar
 
 from .accounts import Account
+from .message_parsing import (
+    DefaultMessageParser,
+    EmailRecord,
+    MessageContext,
+    MessageParser,
+    email_record_from_message,
+    extract_body_text,
+)
 from .oauth import DEFAULT_SCOPE, TOKEN_ENDPOINT, refresh_access_token
 
 
@@ -33,22 +36,6 @@ T = TypeVar("T")
 
 class ImapReceiveError(RuntimeError):
     """Raised when IMAP receiving fails."""
-
-
-@dataclass(frozen=True)
-class EmailRecord:
-    account_email: str
-    mailbox: str
-    uid: str
-    uidvalidity: str
-    message_id: str | None
-    subject: str
-    sender: str
-    recipients: str
-    sent_at: str | None
-    body_preview: str
-    raw_message: bytes
-    raw_message_complete: bool = True
 
 
 @dataclass(frozen=True)
@@ -136,7 +123,9 @@ def fetch_messages(
     imap_timeout: int | float | None = DEFAULT_IMAP_TIMEOUT,
     debug: bool = False,
     diagnostics: FetchDiagnostics | None = None,
+    message_parser: MessageParser | None = None,
 ) -> list[EmailRecord]:
+    parser = message_parser or DefaultMessageParser()
     options = FetchOptions(
         mailbox=mailbox,
         limit=limit,
@@ -212,6 +201,7 @@ def fetch_messages(
                 account_email=account.email,
                 mailbox=options.mailbox,
                 uidvalidity=selection.uidvalidity,
+                message_parser=parser,
             ),
         )
 
@@ -369,19 +359,20 @@ def _records_from_message_payloads(
     account_email: str,
     mailbox: str,
     uidvalidity: str,
+    message_parser: MessageParser,
 ) -> list[EmailRecord]:
     records: list[EmailRecord] = []
     for uid, raw_message, raw_message_complete in payloads:
-        message = BytesParser(policy=policy.default).parsebytes(raw_message)
         records.append(
-            email_record_from_message(
-                account_email=account_email,
-                mailbox=mailbox,
-                uid=uid,
-                uidvalidity=uidvalidity,
-                message=message,
-                raw_message=raw_message,
-                raw_message_complete=raw_message_complete,
+            message_parser.parse(
+                raw_message,
+                MessageContext(
+                    account_email=account_email,
+                    mailbox=mailbox,
+                    uid=uid,
+                    uidvalidity=uidvalidity,
+                    raw_message_complete=raw_message_complete,
+                ),
             )
         )
     return records
@@ -594,193 +585,3 @@ def _metadata_bytes(value: object) -> bytes | None:
     if isinstance(value, bytes):
         return value
     return str(value).encode("ascii", errors="ignore")
-
-
-def email_record_from_message(
-    *,
-    account_email: str,
-    mailbox: str,
-    uid: str,
-    uidvalidity: str,
-    message: Message,
-    raw_message: bytes,
-    raw_message_complete: bool = True,
-) -> EmailRecord:
-    subject = str(message.get("subject", ""))
-    sender = str(message.get("from", ""))
-    recipients = ", ".join(
-        value for value in (message.get("to"), message.get("cc"), message.get("bcc")) if value
-    )
-    sent_at = _parse_message_date(message.get("date"))
-    body_preview = extract_body_text(message)[:1000]
-
-    return EmailRecord(
-        account_email=account_email,
-        mailbox=mailbox,
-        uid=uid,
-        uidvalidity=uidvalidity,
-        message_id=message.get("message-id"),
-        subject=subject,
-        sender=sender,
-        recipients=recipients,
-        sent_at=sent_at,
-        body_preview=body_preview,
-        raw_message=raw_message,
-        raw_message_complete=raw_message_complete,
-    )
-
-
-def _decode_text_payload(payload: bytes, charset: str | None) -> str:
-    try:
-        return payload.decode(charset or "utf-8", errors="replace")
-    except (LookupError, UnicodeError):
-        return payload.decode("utf-8", errors="replace")
-
-
-def _iter_inline_leaf_parts(message: Message) -> Iterable[Message]:
-    if not message.is_multipart():
-        yield message
-        return
-
-    payload = message.get_payload()
-    if not isinstance(payload, list):
-        return
-    for child in payload:
-        if not isinstance(child, Message):
-            continue
-        if child.get_content_disposition() == "attachment":
-            continue
-        yield from _iter_inline_leaf_parts(child)
-
-
-def extract_body_text(message: Message) -> str:
-    if message.is_multipart():
-        plain_parts: list[str] = []
-        html_parts: list[str] = []
-        for part in _iter_inline_leaf_parts(message):
-            content_type = part.get_content_type()
-            try:
-                content = part.get_content()
-            except Exception:
-                payload = part.get_payload(decode=True) or b""
-                charset = part.get_content_charset()
-                content = _decode_text_payload(payload, charset)
-            if content_type == "text/plain":
-                plain_text = str(content)
-                if plain_text.strip():
-                    plain_parts.append(plain_text)
-            elif content_type == "text/html":
-                html_text = _html_to_text(str(content))
-                if html_text:
-                    html_parts.append(html_text)
-        return "\n".join(plain_parts or html_parts).strip()
-
-    try:
-        content = str(message.get_content()).strip()
-    except Exception:
-        payload = message.get_payload(decode=True)
-        if payload is None:
-            content = str(message.get_payload()).strip()
-            if message.get_content_type() == "text/html":
-                return _html_to_text(content)
-            return content
-        charset = message.get_content_charset()
-        content = _decode_text_payload(payload, charset).strip()
-    if message.get_content_type() == "text/html":
-        return _html_to_text(content)
-    return content
-
-
-class _ReadableHtmlParser(HTMLParser):
-    _BLOCK_TAGS = {
-        "address",
-        "article",
-        "aside",
-        "blockquote",
-        "br",
-        "div",
-        "footer",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-        "header",
-        "hr",
-        "li",
-        "main",
-        "ol",
-        "p",
-        "pre",
-        "section",
-        "table",
-        "tbody",
-        "td",
-        "th",
-        "thead",
-        "tr",
-        "ul",
-    }
-    _SKIP_TAGS = {"head", "style", "script", "noscript", "template", "title"}
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self._chunks: list[str] = []
-        self._skip_depth = 0
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        lowered = tag.lower()
-        if self._skip_depth:
-            if lowered in self._SKIP_TAGS:
-                self._skip_depth += 1
-            return
-        if lowered in self._SKIP_TAGS:
-            self._skip_depth = 1
-            return
-        if lowered in self._BLOCK_TAGS:
-            self._chunks.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:
-        lowered = tag.lower()
-        if self._skip_depth:
-            if lowered in self._SKIP_TAGS:
-                self._skip_depth -= 1
-            return
-        if lowered in self._BLOCK_TAGS and lowered != "br":
-            self._chunks.append("\n")
-
-    def handle_data(self, data: str) -> None:
-        if not self._skip_depth:
-            self._chunks.append(data)
-
-    def text(self) -> str:
-        return _normalize_readable_text("".join(self._chunks))
-
-
-def _html_to_text(value: str) -> str:
-    parser = _ReadableHtmlParser()
-    parser.feed(value)
-    parser.close()
-    return parser.text()
-
-
-def _normalize_readable_text(value: str) -> str:
-    text = value.replace("\u00a0", " ")
-    text = re.sub(r"\r\n?", "\n", text)
-    text = re.sub(r"[ \t\f\v]+", " ", text)
-    text = re.sub(r" *\n *", "\n", text)
-    text = re.sub(r"\n{2,}", "\n", text)
-    return text.strip()
-
-
-def _parse_message_date(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        parsed = parsedate_to_datetime(value)
-    except (TypeError, ValueError):
-        return value
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat()

@@ -7,7 +7,7 @@ import re
 import sqlite3
 from typing import Iterable, Iterator
 
-from .imap_client import EmailRecord
+from .message_parsing import EmailRecord
 
 
 DEFAULT_DB_PATH = Path("mail_store.sqlite3")
