@@ -2,6 +2,7 @@ import ast
 import importlib
 import inspect
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 import unittest
 
 
@@ -14,8 +15,23 @@ def imported_modules(path: Path) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             modules.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            modules.add(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            if not node.level:
+                if node.module:
+                    modules.add(node.module)
+                continue
+
+            package_parts = list(
+                path.resolve().parent.relative_to(ROOT.resolve()).parts
+            )
+            keep_count = max(0, len(package_parts) - node.level + 1)
+            base_parts = package_parts[:keep_count]
+            if node.module:
+                modules.add(".".join([*base_parts, *node.module.split(".")]))
+            else:
+                modules.update(
+                    ".".join([*base_parts, alias.name]) for alias in node.names
+                )
     return modules
 
 
@@ -28,6 +44,24 @@ def function_node(path: Path, name: str) -> ast.FunctionDef:
 
 
 class ArchitectureTests(unittest.TestCase):
+    def test_imported_modules_normalizes_relative_imports_to_package_names(self) -> None:
+        with NamedTemporaryFile(
+            mode="w",
+            suffix=".py",
+            dir=ROOT / "mail_receiver",
+            encoding="utf-8",
+            delete=False,
+        ) as fixture:
+            fixture.write("from .imap_client import fetch_messages\n")
+            fixture_path = Path(fixture.name)
+
+        try:
+            imports = imported_modules(fixture_path)
+        finally:
+            fixture_path.unlink(missing_ok=True)
+
+        self.assertEqual(imports, {"mail_receiver.imap_client"})
+
     def test_architecture_modules_avoid_vague_public_type_names(self) -> None:
         prohibited = {"Manager", "Helper", "Utils", "Processor", "Data"}
         public_types: set[str] = set()

@@ -797,6 +797,46 @@ class WebServiceTests(unittest.TestCase):
             self.assertEqual(seen_kwargs["imap_timeout"], 8)
             self.assertEqual(seen_kwargs["token_timeout"], 8)
 
+    def test_check_accounts_stop_on_error_keeps_full_account_count_and_first_failure_row(self) -> None:
+        calls: list[str] = []
+        failure = "authenticate with XOAUTH2 failed: NO"
+
+        def fake_check(account, **_kwargs):
+            calls.append(account.email)
+            if len(calls) > 1:
+                self.fail("second account must not be checked after the first failure")
+            raise RuntimeError(failure)
+
+        with patch("mail_receiver.web.check_account", side_effect=fake_check):
+            response = check_accounts_data(
+                {
+                    "account_text": (
+                        "first@outlook.com----fake-pass-1----fake-client-1----fake-refresh-1\n"
+                        "second@outlook.com----fake-pass-2----fake-client-2----fake-refresh-2"
+                    ),
+                    "stop_on_error": True,
+                },
+                WebConfig(),
+            )
+
+        self.assertEqual(calls, ["first@outlook.com"])
+        self.assertEqual(response["accounts"], 2)
+        self.assertEqual(response["ok"], 0)
+        self.assertEqual(response["failed"], 1)
+        self.assertEqual(
+            response["rows"],
+            [
+                {
+                    "email": "first@outlook.com",
+                    "ok": False,
+                    "stage": "auth",
+                    "mailbox": "INBOX",
+                    "message_count": None,
+                    "error": failure,
+                }
+            ],
+        )
+
     def test_outlook_mailbox_checker_maps_core_check_result(self) -> None:
         from mail_receiver.mail_fetching import OutlookAccountMailboxChecker
 
