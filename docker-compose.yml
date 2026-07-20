@@ -4,5 +4,5 @@ services:
     container_name: outlook-mail-fetcher
     init: true
     ports:
-      - "8765:8765"
+      - "127.0.0.1:8765:8765"
     restart: unless-stopped
