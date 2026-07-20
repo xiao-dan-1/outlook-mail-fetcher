@@ -1,0 +1,68 @@
+{
+  "title": "Outlook 邮件",
+  "h1": "Outlook 邮件",
+  "accountCount": "40 个账号",
+  "visibleText": "Outlook 邮件\n\n账号校验、IMAP 拉取与本次结果审阅\nv0.1.0\n\n浅色\n深色\n系统状态\n已读取 40 个账号\n账号管理\n显示原文\n40 个账号\n粘贴账号\n40 / 40 行有效\n格式完整后会自动读取账号。\n账号状态\nperson01@outlook.com\n待拉取\nperson02@outlook.com\n待拉取\nperson03@outlook.com\n待拉取\nperson04@outlook.com\n待拉取\nperson05@outlook.com\n待拉取\nperson06@outlook.com\n待拉取\nperson07@outlook.com\n待拉取\nperson08@outlook.com\n待拉取\nperson09@outlook.com\n待拉取\nperson10@outlook.com\n待拉取\nperson11@outlook.com\n待拉取\nperson12@outlook.com\n待拉取\nperson13@outlook.com\n待拉取\nperson14@outlook.com\n待拉取\nperson15@outlook.com\n待拉取\nperson16@outlook.com\n待拉取\nperson17@outlook.com\n待拉取\nperson18@outlook.com\n待拉取\nperson19@outlook.com\n待拉取\nperson20@outlook.com\n待拉取\nperson21@outlook.com\n待拉取\nperson22@outlook.com\n待拉取\nperson23@outlook.com\n待拉取\nperson24@outlook.com\n待拉取\nperson25@outlook.com\n待拉取\nperson26@outlook.com\n待拉取\nperson27@outlook.com\n待拉取\nperson28@outlook.com\n待拉取\nperson29@outlook.com\n待拉取\nperson30@outlook.com\n待拉取\nperson31@outlook.com\n待拉取\nperson32@outlook.com\n待拉取\nperson33@outlook.com\n待拉取\nperson34@outlook.com\n待拉取\nperson35@outlook.com\n待拉取\nperson36@outlook.com\n待拉取\nperson37@outlook.com\n待拉取\nperson38@outlook.com\n待拉取\nperson39@outlook.com\n待拉取\nperson40@outlook.com\n待拉取\n控制台\n选中账号\n全部账号\n选中账号\nperson01@outlook.com · 最多 1 封 · 快速预览\n拉取邮件\n复制当前验证码\n高级设置\n邮箱目录 · 数量 ·",
+  "viewport": {
+    "width": 1412,
+    "height": 1216
+  },
+  "header": {
+    "top": 23,
+    "left": 23,
+    "right": 1374,
+    "bottom": 113,
+    "width": 1352,
+    "height": 90
+  },
+  "account": {
+    "top": 128,
+    "left": 23,
+    "right": 443,
+    "bottom": 1202,
+    "width": 420,
+    "height": 1074
+  },
+  "operation": {
+    "top": 128,
+    "left": 455,
+    "right": 1374,
+    "bottom": 432,
+    "width": 920,
+    "height": 304
+  },
+  "result": {
+    "top": 444,
+    "left": 455,
+    "right": 1374,
+    "bottom": 1202,
+    "width": 920,
+    "height": 758
+  },
+  "mailSummary": {
+    "top": 501,
+    "left": 472,
+    "right": 1357,
+    "bottom": 556,
+    "width": 886,
+    "height": 55
+  },
+  "accountList": {
+    "top": 358,
+    "left": 38,
+    "right": 428,
+    "bottom": 1187,
+    "width": 390,
+    "height": 828
+  },
+  "rowCount": 40,
+  "accountListClientHeight": 828,
+  "accountListScrollHeight": 1955,
+  "dashboardDisplay": "grid",
+  "dashboardColumns": "420px 919.844px",
+  "commandDisplay": "contents",
+  "advancedOpen": false,
+  "fetchButtonText": "拉取邮件",
+  "primaryActionDisabled": false,
+  "activeScope": "选中账号"
+}

@@ -1,0 +1,91 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "bodyScroll": {
+    "scrollHeight": 1832,
+    "clientHeight": 844
+  },
+  "header": {
+    "x": 10,
+    "y": 10,
+    "width": 370,
+    "height": 134,
+    "scrollHeight": 132,
+    "clientHeight": 132,
+    "overflowY": "hidden",
+    "text": "Outlook 邮件 账号校验、IMAP 拉取与本次结果审阅 v0.1.0 浅色 深色 系统状态 拉取完成：邮件 8，失败 0"
+  },
+  "accountPanel": {
+    "x": 10,
+    "y": 154,
+    "width": 370,
+    "height": 335,
+    "scrollHeight": 333,
+    "clientHeight": 333,
+    "overflowY": "visible",
+    "text": "账号管理 显示原文 8 个账号 粘贴账号 8 / 8 行有效 格式完整后会自动读取账号。 账号状态 designer01@outlook.com 已拉取 · 1 封 · 1.2s 下载 2.0KB · 慢点 拉取 500ms designer02@outlook.com 已拉取 · 1 封 · 1.3s 下载 2.0KB · 慢点 拉取 500ms desi"
+  },
+  "operationPanel": {
+    "x": 10,
+    "y": 499,
+    "width": 370,
+    "height": 221,
+    "scrollHeight": 219,
+    "clientHeight": 219,
+    "overflowY": "hidden",
+    "text": "控制台 选中账号 全部账号 拉取邮件 复制当前验证码 高级设置 邮箱目录 · 数量 · 原文"
+  },
+  "resultPanel": {
+    "x": 10,
+    "y": 730,
+    "width": 370,
+    "height": 1092,
+    "scrollHeight": 1090,
+    "clientHeight": 1090,
+    "overflowY": "hidden",
+    "text": "邮件结果 本次 8 封 选择左侧邮件查看正文和关键头信息。 邮件 8 账号 6 受限 0 M 安全验证码 128901 Microsoft account team designer01@outlook.com 验证码 128901，用于当前登录验证。 07/10 09:20 O Your verification code is 345602 OpenAI"
+  },
+  "mailSummary": {
+    "x": 23,
+    "y": 781,
+    "width": 344,
+    "height": 49,
+    "scrollHeight": 47,
+    "clientHeight": 47,
+    "overflowY": "hidden",
+    "text": "本次 8 封 选择左侧邮件查看正文和关键头信息。 邮件 8 账号 6 受限 0"
+  },
+  "mailList": {
+    "x": 24,
+    "y": 841,
+    "width": 342,
+    "height": 304,
+    "scrollHeight": 618,
+    "clientHeight": 304,
+    "overflowY": "auto",
+    "text": "M 安全验证码 128901 Microsoft account team designer01@outlook.com 验证码 128901，用于当前登录验证。 07/10 09:20 O Your verification code is 345602 OpenAI designer02@outlook.com 验证码 128902，用于当前登录验证。 "
+  },
+  "mailDetail": {
+    "x": 24,
+    "y": 1146,
+    "width": 342,
+    "height": 662,
+    "scrollHeight": 664,
+    "clientHeight": 662,
+    "overflowY": "auto",
+    "text": "安全验证码 128901 Microsoft account team 07/10 09:20 INBOX 验证码摘要 128901 关键词附近 · 高置信 复制验证码 账号 designer01@outlook.com 目录 INBOX 时间 07/10 09:20 可读正文 · 38 字 · 正文已净化 · 当前会话预览 M Microsoft acco"
+  },
+  "logTab": {
+    "x": 330,
+    "y": 800,
+    "width": 50,
+    "height": 34,
+    "scrollHeight": 32,
+    "clientHeight": 32,
+    "overflowY": "visible",
+    "text": "日志"
+  },
+  "rowCount": 8
+}

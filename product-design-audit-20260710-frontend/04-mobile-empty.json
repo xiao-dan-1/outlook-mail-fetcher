@@ -1,0 +1,68 @@
+{
+  "title": "Outlook 邮件",
+  "h1": "Outlook 邮件",
+  "accountCount": "0 个账号",
+  "visibleText": "Outlook 邮件\n\n账号校验、IMAP 拉取与本次结果审阅\nv0.1.0\n\n浅色\n深色\n系统状态\n准备就绪\n账号管理\n隐私保护\n0 个账号\n粘贴账号\n等待输入\n粘贴账号 → 拉取邮件 → 查看验证码。\n账号状态\n三步开始\n粘贴账号 → 拉取邮件 → 查看验证码\n粘贴账号\n拉取邮件\n查看验证码\n控制台\n选中账号\n全部账号\n拉取邮件\n复制当前验证码\n高级设置\n邮箱目录 · 数量 · 原文\n邮件结果\n等待拉取\n收件箱列表和阅读区会在同一视图内更新。\n状态\n待命\n邮件\n0\n账号\n0\n等待本次拉取\n拉取成功后会在这里显示最近邮件，并自动选中第一封。\n账号解析\nIMAP 拉取\n自动选中\n选择邮件查看详情\n主题、来源、收件人和正文预览会在选中邮件后展开。\n当前会话预览\n关键头信息\n展开日志\n运行日志",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "header": {
+    "top": 10,
+    "left": 10,
+    "right": 380,
+    "bottom": 144,
+    "width": 370,
+    "height": 134
+  },
+  "account": {
+    "top": 154,
+    "left": 10,
+    "right": 380,
+    "bottom": 485,
+    "width": 370,
+    "height": 331
+  },
+  "operation": {
+    "top": 495,
+    "left": 10,
+    "right": 380,
+    "bottom": 711,
+    "width": 370,
+    "height": 216
+  },
+  "result": {
+    "top": 721,
+    "left": 10,
+    "right": 380,
+    "bottom": 1425,
+    "width": 370,
+    "height": 704
+  },
+  "mailSummary": {
+    "top": 772,
+    "left": 23,
+    "right": 367,
+    "bottom": 843,
+    "width": 344,
+    "height": 71
+  },
+  "accountList": {
+    "top": 377,
+    "left": 23,
+    "right": 367,
+    "bottom": 429,
+    "width": 344,
+    "height": 52
+  },
+  "rowCount": 0,
+  "accountListClientHeight": 52,
+  "accountListScrollHeight": 52,
+  "dashboardDisplay": "flex",
+  "dashboardColumns": "1fr",
+  "commandDisplay": "contents",
+  "advancedOpen": false,
+  "fetchButtonText": "拉取邮件",
+  "primaryActionDisabled": true,
+  "activeScope": "选中账号"
+}
