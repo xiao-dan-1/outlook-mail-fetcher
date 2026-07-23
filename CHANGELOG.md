@@ -2,6 +2,19 @@
 
 本项目的更新记录写在这里；发布时把当前版本号、日期和用户可感知的变更列清楚。
 
+## [0.2.0] - 2026-07-23
+
+### Added
+
+- 新增 React + Vite + TypeScript 前端（`frontend/`）：Zustand 状态、并行取信、虚拟滚动邮件列表、账号输入/操作台/日志与阅读区组件。
+- 新增 FastAPI 后端与 WebSocket 实时进度推送（`mail_receiver/fastapi_server.py`），前端配套 `useWebSocket` 钩子。
+- 前端启用 PWA：`vite-plugin-pwa`、Service Worker 与离线缓存。
+- 补充 2026-07-10 产品设计审计观察与前端截图/指标资产（`product-design-audit-20260710-*`）。
+
+### Changed
+
+- 前端栈从内联静态页演进为独立 Vite SPA，并保留现有 stdlib Web/CLI 入口兼容路径。
+
 ## [0.1.4] - 2026-07-19
 
 ### Added
