@@ -173,7 +173,7 @@ class DockerDeploymentTests(unittest.TestCase):
         self.assertIn("services:", compose)
         self.assertIn("outlook-mail-fetcher:", compose)
         self.assertIn(f"image: {GHCR_IMAGE}", compose)
-        self.assertIn('"8765:8765"', compose)
+        self.assertIn('"127.0.0.1:8765:8765"', compose)
         self.assertIn("restart: unless-stopped", compose)
         self.assertIn("init: true", compose)
         self.assertNotIn("build:", compose)
